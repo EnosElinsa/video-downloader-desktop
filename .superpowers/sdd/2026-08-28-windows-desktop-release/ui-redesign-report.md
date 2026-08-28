@@ -35,4 +35,6 @@
 - Code fix commit: `33790e42aae9447f1fc6e80ea44e69bf995b24d2`.
 
 ## Commit
-- `613c59afe8f812e9b36dde623d9b8c8d813b251f`
+- Code fix: `33790e42aae9447f1fc6e80ea44e69bf995b24d2`
+- Prior UI redesign fix: `613c59afe8f812e9b36dde623d9b8c8d813b251f`
+- Report finalization before this correction: `c4ed4aadd8860710e98a0eda119c6097eacf14db`
