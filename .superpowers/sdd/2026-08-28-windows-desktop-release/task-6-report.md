@@ -48,3 +48,11 @@ Command: `pwsh -NoProfile -File packaging/build_windows.ps1 -Version 0.1.0`
 - Expanded packaging tests to 11 cases covering invalid architecture/toolchains, smoke failure, checksum parsing/coverage, ZIP executable layout, and the safe FFmpeg helper.
 
 Round 1 verification: focused packaging tests `11 passed`; rebuilt both artifacts with the pinned FFmpeg downloader and architecture guard; build gate `57 passed` (two pre-existing pytest cache permission warnings); both one-folder and one-file smoke tests returned `Video Downloader 0.1.0`; checksum manifest matched the rebuilt ZIP/EXE exactly. The custom-path staging fix was exercised by the build script's path resolution before cleanup (the source path may reside under `build`/`dist`).
+
+## Repeat-build temporary directory fix
+
+- Moved build-time `TEMP`/`TMP` from the cleaned `build/tmp` tree to a unique, git-ignored `.test-tmp/packaging-temp/run-<guid>` directory. The script creates and validates this workspace-local path before cleaning only `build/` and `dist/`; it never recursively deletes `.test-tmp` or user/source directories.
+- The build gate now always uses Qt offscreen mode, `C:\Windows\Fonts`, and disables pytest's cache provider, avoiding both display/font drift and repository-cache ACL warnings.
+- Added a static regression contract that rejects any return to `$buildRoot/tmp` and asserts both temporary environment variables use the external run directory.
+- Verification: focused packaging suite `12 passed`; complete suite with `QT_QPA_PLATFORM=offscreen`, `QT_QPA_FONTDIR=C:\Windows\Fonts`, workspace-local temp, and no pytest cache `72 passed`.
+- Executed two complete builds back-to-back. The second used the first build's `dist/.../ffmpeg.exe` via `-FFmpegPath`, safely staged it before `build/dist` cleanup, passed the 72-test gate, rebuilt both artifacts, and passed both frozen `--version` smoke tests. This directly reproduces and clears the prior repeat-run failure mode.

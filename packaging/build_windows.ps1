@@ -14,6 +14,7 @@ $ProgressPreference = "SilentlyContinue"
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $buildRoot = Join-Path $repoRoot "build"
 $distRoot = Join-Path $repoRoot "dist"
+$testTempRoot = Join-Path $repoRoot ".test-tmp/packaging-temp"
 $specPath = Join-Path $PSScriptRoot "video_downloader.spec"
 $artifactBase = "VideoDownloader-windows-x64"
 $oneFolder = Join-Path $distRoot $artifactBase
@@ -147,6 +148,15 @@ function New-DeterministicZip {
 
 $buildRoot = Assert-ChildPath $buildRoot
 $distRoot = Assert-ChildPath $distRoot
+$testTempRoot = Assert-ChildPath $testTempRoot
+$localTemp = Join-Path $testTempRoot ("run-" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force -Path $localTemp | Out-Null
+$env:TEMP = $localTemp
+$env:TMP = $localTemp
+$env:QT_QPA_PLATFORM = "offscreen"
+$env:QT_QPA_FONTDIR = "C:\Windows\Fonts"
+$env:PYTHONHASHSEED = "0"
+$env:SOURCE_DATE_EPOCH = "946684800"
 $requestedFFmpeg = if ($FFmpegPath) { Resolve-FFmpegExecutable $FFmpegPath } else { $null }
 if ($requestedFFmpeg) {
     $buildPrefix = $buildRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
@@ -170,15 +180,8 @@ foreach ($target in @($buildRoot, $distRoot)) {
 }
 New-Item -ItemType Directory -Force -Path $buildRoot, $distRoot | Out-Null
 
-$localTemp = Join-Path $buildRoot "tmp"
-New-Item -ItemType Directory -Force -Path $localTemp | Out-Null
-$env:TEMP = $localTemp
-$env:TMP = $localTemp
-$env:PYTHONHASHSEED = "0"
-$env:SOURCE_DATE_EPOCH = "946684800"
-
 Write-Host "Running release test gate..."
-python -m pytest -q
+python -m pytest -q -p no:cacheprovider
 Assert-ExitCode "pytest"
 python -c "import PyInstaller; print(PyInstaller.__version__)" | Out-Host
 Assert-ExitCode "PyInstaller availability check"

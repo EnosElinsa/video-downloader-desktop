@@ -52,10 +52,24 @@ def test_build_script_has_stable_artifact_names_and_release_gates():
     assert "param(" in script
     assert "[string]$Version" in script
     assert "python -m pytest" in script
+    assert "-p no:cacheprovider" in script
     assert script.count("python -m PyInstaller") == 2
     assert "Get-FileHash" in script
     assert "build_checks.py" in script
     assert "validate_release_environment" in script
+
+
+def test_build_temp_directory_is_outside_the_cleaned_build_root():
+    """Catch repeat builds failing because pytest temp ACLs live under build/."""
+    script = (ROOT / "packaging" / "build_windows.ps1").read_text(encoding="utf-8")
+
+    assert '$testTempRoot = Join-Path $repoRoot ".test-tmp/packaging-temp"' in script
+    assert '$localTemp = Join-Path $testTempRoot' in script
+    assert '$localTemp = Join-Path $buildRoot "tmp"' not in script
+    assert '$env:TEMP = $localTemp' in script
+    assert '$env:TMP = $localTemp' in script
+    assert '$env:QT_QPA_PLATFORM = "offscreen"' in script
+    assert '$env:QT_QPA_FONTDIR = "C:\\Windows\\Fonts"' in script
 
 
 def test_build_script_verifies_downloaded_ffmpeg_before_packaging():

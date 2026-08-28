@@ -14,6 +14,7 @@ htmlcov/
 # Build and release output
 build/
 dist/
+.test-tmp/
 *.spec.bak
 *.egg-info/
 
@@ -35,6 +36,8 @@ logs/
 .test-tmp/
 .full-temp/
 .red-temp/
+.tools/
+.stale-build-acl/
 
 # Editors and operating-system files
 .idea/
