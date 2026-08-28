@@ -6,7 +6,8 @@ from desktop_app.models import DownloadEvent, DownloadResult
 from desktop_app.settings import AppSettings
 
 pytest.importorskip("PySide6")
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QThread
+from PySide6.QtWidgets import QApplication
 
 from desktop_app.main_window import MainWindow
 
@@ -83,3 +84,57 @@ def test_retry_failed_item_requeues_it(qtbot, tmp_path):
 
     assert window.queue.snapshot()[0]["status"] == "queued"
     assert window.queue.snapshot()[0]["error"] is None
+
+
+def test_worker_events_are_delivered_on_gui_thread(qtbot, tmp_path):
+    window = _window(qtbot, tmp_path, FakeService())
+    received_threads = []
+    original = window._handle_event
+
+    def record_thread(item_id, event):
+        received_threads.append(QThread.currentThread())
+        original(item_id, event)
+
+    # start_item must connect through a QObject receiver; a lambda connection
+    # runs this callback on the worker thread and mutates widgets unsafely.
+    window._handle_event = record_thread
+    window.add_urls("https://example.test/a")
+    window.start_item(window.queue.snapshot()[0]["id"])
+    qtbot.waitUntil(lambda: window.queue.snapshot()[0]["status"] == "success")
+
+    assert received_threads
+    assert all(thread == QApplication.instance().thread() for thread in received_threads)
+
+
+def test_cancel_retry_discards_late_events_from_old_worker(qtbot, tmp_path):
+    import threading
+
+    class RaceService:
+        def __init__(self):
+            self.started = threading.Event()
+            self.calls = 0
+
+        def download(self, request, emit, cancel=None):
+            self.calls += 1
+            if self.calls == 1:
+                self.started.set()
+                while not cancel.is_set():
+                    self.started.wait(0.005)
+                # This event belongs to the cancelled run and must be ignored.
+                emit(DownloadEvent("progress", percent=99))
+                return DownloadResult(False, None, None, "cancelled", "cancelled")
+            emit(DownloadEvent("progress", percent=10))
+            return DownloadResult(True, "new.mp4", "new", None, None)
+
+    service = RaceService()
+    window = _window(qtbot, tmp_path, service)
+    window.add_urls("https://example.test/a")
+    item_id = window.queue.snapshot()[0]["id"]
+    window.start_item(item_id)
+    qtbot.waitUntil(service.started.is_set)
+    window.cancel_item(item_id)
+    window.retry_item(item_id)
+    window.start_item(item_id)
+    qtbot.waitUntil(lambda: window.queue.snapshot()[0]["status"] == "success")
+
+    assert window.queue_table.cellWidget(0, window.PROGRESS_COLUMN).value() == 10

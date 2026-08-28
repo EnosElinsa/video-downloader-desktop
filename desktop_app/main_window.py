@@ -5,8 +5,8 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Signal, Slot
-from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Qt, Signal, Slot
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow,
     QLineEdit, QPlainTextEdit, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
@@ -22,6 +22,30 @@ class WorkerSignals(QObject):
     event = Signal(object)
     finished = Signal(object)
     failed = Signal(str)
+
+
+class WorkerBridge(QObject):
+    """QObject receiver that marshals worker callbacks onto the GUI thread."""
+
+    event_for_item = Signal(str, object)
+    finished_for_item = Signal(str, object)
+    failed_for_item = Signal(str, str)
+
+    def __init__(self, item_id, parent=None):
+        super().__init__(parent)
+        self.item_id = item_id
+
+    @Slot(object)
+    def on_event(self, event):
+        self.event_for_item.emit(self.item_id, event)
+
+    @Slot(object)
+    def on_finished(self, result):
+        self.finished_for_item.emit(self.item_id, result)
+
+    @Slot(str)
+    def on_failed(self, error):
+        self.failed_for_item.emit(self.item_id, error)
 
 
 class DownloadWorker(QRunnable):
@@ -55,6 +79,7 @@ class MainWindow(QMainWindow):
         self.thread_pool = QThreadPool(self)
         self.thread_pool.setMaxThreadCount(max(1, int(getattr(settings, "concurrent_downloads", 2))))
         self._workers = {}
+        self._bridges = {}
         self._row_for_item = {}
         self.setWindowTitle("Video Downloader")
         self.setMinimumSize(900, 620)
@@ -154,8 +179,19 @@ class MainWindow(QMainWindow):
         if not snapshot or snapshot["status"] != "queued": return
         self.queue.update_status(item_id, "running"); self._set_status(item_id, "running")
         item = self.queue._items[item_id]
-        worker = DownloadWorker(self.service, item.request); self._workers[item_id] = worker
-        worker.signals.event.connect(lambda event, i=item_id: self._handle_event(i, event)); worker.signals.finished.connect(lambda result, i=item_id: self._handle_finished(i, result)); worker.signals.failed.connect(lambda error, i=item_id: self._handle_failed(i, error)); self.thread_pool.start(worker)
+        worker = DownloadWorker(self.service, item.request)
+        bridge = WorkerBridge(item_id, self)
+        self._workers[item_id] = worker
+        self._bridges[item_id] = bridge
+        # Explicit QObject receivers plus queued delivery prevent worker
+        # threads from ever touching widgets, even for Python callables.
+        worker.signals.event.connect(bridge.on_event, Qt.QueuedConnection)
+        worker.signals.finished.connect(bridge.on_finished, Qt.QueuedConnection)
+        worker.signals.failed.connect(bridge.on_failed, Qt.QueuedConnection)
+        bridge.event_for_item.connect(self._handle_event, Qt.QueuedConnection)
+        bridge.finished_for_item.connect(self._handle_finished, Qt.QueuedConnection)
+        bridge.failed_for_item.connect(self._handle_failed, Qt.QueuedConnection)
+        self.thread_pool.start(worker)
 
     @Slot(str)
     def cancel_item(self, item_id):
@@ -169,6 +205,11 @@ class MainWindow(QMainWindow):
     def retry_item(self, item_id):
         try: self.queue.retry(item_id)
         except ValueError: return
+        # Invalidate callbacks from a cancelled/failed previous run before
+        # exposing the item as queued again. A subsequent start gets a new
+        # bridge and cannot be affected by late signals from the old worker.
+        self._workers.pop(item_id, None)
+        self._bridges.pop(item_id, None)
         self._set_status(item_id, "queued"); row = self._row_for_item.get(item_id)
         if row is not None:
             self.queue_table.cellWidget(row, self.PROGRESS_COLUMN).set_value(0)
@@ -187,8 +228,12 @@ class MainWindow(QMainWindow):
             self.queue_table.removeRow(row)
             self._row_for_item = {key: (value - 1 if value > row else value) for key, value in self._row_for_item.items()}
 
+    @Slot(str, object)
     def _handle_event(self, item_id, event):
         if not isinstance(event, DownloadEvent): return
+        sender = self.sender()
+        if sender is not None and sender is not self._bridges.get(item_id):
+            return
         current = next((i for i in self.queue.snapshot() if i["id"] == item_id), None)
         if current is None or current["status"] == "cancelled":
             return
@@ -200,8 +245,13 @@ class MainWindow(QMainWindow):
         if event.kind == "failed": self._mark_failed(item_id, event.message, event.error_code)
         elif event.kind == "cancelled": self._mark_cancelled(item_id)
 
+    @Slot(str, object)
     def _handle_finished(self, item_id, result):
+        sender = self.sender()
+        if sender is not None and sender is not self._bridges.get(item_id):
+            return
         self._workers.pop(item_id, None)
+        self._bridges.pop(item_id, None)
         current = next((i for i in self.queue.snapshot() if i["id"] == item_id), None)
         if current is None or current["status"] == "cancelled":
             return
@@ -209,7 +259,14 @@ class MainWindow(QMainWindow):
             self.queue.update_status(item_id, "success", filename=result.filename, title=result.title); self._set_status(item_id, "success"); self._log(f"Finished: {result.title or result.filename or 'download'}")
         else: self._mark_cancelled(item_id) if result.error_code == "cancelled" else self._mark_failed(item_id, result.error_message or "Download failed", result.error_code)
 
-    def _handle_failed(self, item_id, error): self._workers.pop(item_id, None); self._mark_failed(item_id, error, "download_failed")
+    @Slot(str, str)
+    def _handle_failed(self, item_id, error):
+        sender = self.sender()
+        if sender is not None and sender is not self._bridges.get(item_id):
+            return
+        self._workers.pop(item_id, None)
+        self._bridges.pop(item_id, None)
+        self._mark_failed(item_id, error, "download_failed")
     def _mark_failed(self, item_id, message, code):
         try: self.queue.update_status(item_id, "failed", error=message, error_code=code)
         except ValueError: return

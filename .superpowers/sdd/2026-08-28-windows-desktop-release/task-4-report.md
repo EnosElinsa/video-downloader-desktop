@@ -22,3 +22,9 @@
 
 - The header Settings action currently persists the current settings and is intentionally non-blocking; a full modal settings editor for proxy, cookies, concurrency, and startup behavior can be added in a later task without changing the worker boundary.
 - The queue is in-memory for this shell; persistent history is outside Task 4 and remains owned by the settings/queue layer.
+
+## Round 1 review fixes
+
+- Replaced lambda-based worker connections with `WorkerBridge` QObject receivers and explicit `Qt.QueuedConnection` links for event, finished, and failed signals.
+- Added sender/bridge identity filtering and invalidation on retry, preventing late callbacks from a cancelled run from mutating or completing the retried row.
+- Added regression coverage for GUI-thread event delivery and cancel→retry→late-event races.
