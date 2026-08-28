@@ -39,8 +39,7 @@ If you prefer manual installation:
 pip install yt-dlp>=2023.3.4 requests>=2.25.0
 ```
 
-2. The new desktop app uses PySide6 and does not require tkinter. The legacy
-   `video_downloader_gui.py` launcher retains its tkinter dependency.
+2. The desktop app uses PySide6 and does not require tkinter.
 
 ## Usage
 
@@ -82,7 +81,7 @@ Follow the prompts to:
 ### Graphical User Interface
 
 ```
-python video_downloader_gui.py
+python -m desktop_app
 ```
 
 The GUI provides an easy-to-use interface for:
@@ -90,6 +89,10 @@ The GUI provides an easy-to-use interface for:
 - Selecting output directory
 - Configuring proxy settings
 - Monitoring download progress
+
+Existing shortcuts using `python video_downloader_gui.py` continue to launch
+the same PySide6 desktop app. See [the Windows user guide](docs/windows-user-guide.md)
+for cookies, proxy, output-directory, retry, and SmartScreen guidance.
 
 ## Configuration
 
@@ -99,7 +102,9 @@ The program saves your configuration preferences for:
 - Format selection preferences
 - Browser cookie source for authenticated videos
 
-Configuration is stored in your home directory as `.video_downloader_config.json`.
+The desktop app stores its settings under `%LOCALAPPDATA%\VideoDownloader`.
+The legacy CLI keeps its existing home-directory configuration file for
+backward compatibility.
 
 ## Supported Sites
 
@@ -127,8 +132,8 @@ If you encounter issues:
 3. **Rockstar page is unsupported**: The downloader recognizes current `/videos/<id>` pages and tries the public CDN variants (including the requested `resolution` query). If a variant is unavailable it falls back through lower resolutions.
 4. **Geo-restricted content**: Configure a proxy.
 5. **Dependencies issues**: Run `pip install -r requirements.txt`.
-6. **Legacy GUI not working**: Ensure tkinter is installed. The new PySide6
-   desktop app instead requires the packages in `requirements-desktop.txt`.
+6. **Desktop app will not start**: Install the packages in
+   `requirements-desktop.txt` and launch it with `python -m desktop_app`.
 
 The GUI always uses the automatic best-quality selector so downloads never wait
 for a terminal prompt. Use the CLI if you need to choose an individual format.
@@ -143,4 +148,3 @@ Built with:
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - A powerful video downloader supporting many sites
 - [requests](https://requests.readthedocs.io/en/latest/) - For direct URL downloading
 - [PySide6](https://doc.qt.io/qtforpython-6/) - For the new desktop interface
-- [tkinter](https://docs.python.org/3/library/tkinter.html) - For the legacy GUI launcher

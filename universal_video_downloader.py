@@ -639,7 +639,12 @@ def load_config():
     }
 
 def main():
-    """Main entry point for the script."""
+    """Run the legacy interactive CLI, including its optional format picker.
+
+    The PySide6 application has a separate launcher at ``python -m
+    desktop_app`` so existing scripts that invoke this module keep their
+    terminal workflow unchanged.
+    """
     check_dependencies()
     
     # Load configuration
