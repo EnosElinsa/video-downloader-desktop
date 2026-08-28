@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-import universal_video_downloader as downloader
+import desktop_app.cli as downloader
 
 
 class DownloaderUrlTests(unittest.TestCase):
@@ -57,7 +57,7 @@ class DownloaderUrlTests(unittest.TestCase):
                 self.__class__.requests.append(request)
                 return DownloadResult(True, "demo.mp4", "Demo", None, None)
 
-        with patch("desktop_app.download_core.DownloadService", FakeService), \
+        with patch("desktop_app.cli.DownloadService", FakeService), \
                 patch.object(downloader, "download_with_ytdlp", return_value=False) as legacy_download:
             self.assertTrue(downloader.download_video(raw, output_dir="downloads"))
 
@@ -159,7 +159,7 @@ class DownloaderOptionsTests(unittest.TestCase):
                 return 0
 
         with patch.object(yt_dlp, "YoutubeDL", FakeYDL), \
-                patch.object(downloader, "choose_format_for_context", return_value="22"):
+                patch("desktop_app.yt_dlp_adapter.choose_format_for_context", return_value="22"):
             result = downloader.download_video("https://example.test/video", select_format=True)
 
         self.assertTrue(result)
@@ -213,7 +213,7 @@ class DownloaderFallbackTests(unittest.TestCase):
     def test_legacy_error_logger_redacts_proxy_userinfo_and_known_credentials(self):
         proxy = "http://legacy-user:legacy-secret@proxy.example"
 
-        with self.assertLogs(downloader.logger, level="ERROR") as captured:
+        with self.assertLogs("desktop_app.yt_dlp_adapter", level="ERROR") as captured:
             downloader._log_download_error(
                 RuntimeError(
                     "failed through http://legacy-user:legacy-secret@proxy.example "

@@ -6,3 +6,5 @@ def test_desktop_dependency_files_exist():
     assert (root / "pyproject.toml").is_file()
     assert (root / "requirements-desktop.txt").is_file()
     assert (root / "requirements-dev.txt").is_file()
+    assert (root / "desktop_app" / "cli.py").is_file()
+    assert (root / "desktop_app" / "batch.py").is_file()

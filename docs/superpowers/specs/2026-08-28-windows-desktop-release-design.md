@@ -15,8 +15,8 @@ compiled desktop artifacts.
 
 The application is split into three layers:
 
-1. **Download core** — the existing `universal_video_downloader` logic,
-   refactored behind a small service API. It owns URL normalization, site
+1. **Download core** — the downloader logic under `desktop_app`, exposed
+   behind a small service interface. It owns URL normalization, site
    detection, yt-dlp options, cookies, proxies, retries, direct media fallback,
    and structured progress/error events. It must not import Qt or touch widgets.
 2. **Desktop UI** — a PySide6 application that owns windows, settings, the

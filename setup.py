@@ -33,12 +33,12 @@ def create_desktop_shortcut():
             # Create command file for CLI
             cli_path = os.path.join(desktop, "Video Downloader (CLI).bat")
             with open(cli_path, "w") as f:
-                f.write(f'@echo off\n"{sys.executable}" "{os.path.join(os.path.dirname(os.path.abspath(__file__)), "universal_video_downloader.py")}"\npause')
+                f.write(f'@echo off\n"{sys.executable}" -m desktop_app.cli\npause')
             
             # Create command file for GUI
             gui_path = os.path.join(desktop, "Video Downloader (GUI).bat")
             with open(gui_path, "w") as f:
-                f.write(f'@echo off\n"{sys.executable}" "{os.path.join(os.path.dirname(os.path.abspath(__file__)), "video_downloader_gui.py")}"\npause')
+                f.write(f'@echo off\n"{sys.executable}" -m desktop_app\npause')
             
             print(f"Desktop shortcuts created at: {desktop}")
             return True
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         setup(
             name="video_downloader",
-            version="0.1.0",
+            version="0.1.1",
             description="Universal Video Downloader",
             author="Video Downloader Team",
             packages=find_packages(),
@@ -67,8 +67,9 @@ if __name__ == "__main__":
             ],
             entry_points={
                 'console_scripts': [
-                    'video-downloader=universal_video_downloader:main',
+                    'video-downloader=desktop_app.cli:main',
                     'video-downloader-gui=desktop_app.main:main',
+                    'video-downloader-batch=desktop_app.batch:main',
                 ],
             },
         )
@@ -91,7 +92,8 @@ if __name__ == "__main__":
         
         print("\nSetup completed!")
         print("\nTo use the downloader:")
-        print("1. Command line: python universal_video_downloader.py")
+        print("1. Command line: python -m desktop_app.cli")
         print("2. GUI version: python -m desktop_app")
+        print("3. Markdown batch: python -m desktop_app.batch --source FILE.md")
         
         input("\nPress Enter to exit...") 

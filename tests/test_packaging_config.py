@@ -191,7 +191,7 @@ def test_version_flag_does_not_initialize_qt(monkeypatch, capsys):
     monkeypatch.setattr(desktop_main, "QApplication", UnexpectedApplication)
 
     assert desktop_main.main(["--version"]) == 0
-    assert capsys.readouterr().out == "Video Downloader 0.1.0\n"
+    assert capsys.readouterr().out == "Video Downloader 0.1.1\n"
 
 
 def test_frozen_downloads_use_the_bundled_ffmpeg(monkeypatch, tmp_path):

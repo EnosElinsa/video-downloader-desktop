@@ -9,9 +9,9 @@ python -m pip install -r requirements-desktop.txt
 python -m desktop_app
 ```
 
-The older `python video_downloader_gui.py` command is retained as a shortcut
-and opens this same desktop app. Use `python universal_video_downloader.py`
-when you want the legacy terminal workflow and interactive format picker.
+Use `python -m desktop_app.cli` when you want the terminal workflow and its
+interactive format picker. Structured Markdown batches are available through
+`python -m desktop_app.batch --source FILE.md`.
 
 ## Output directory
 

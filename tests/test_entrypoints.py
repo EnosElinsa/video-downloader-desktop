@@ -22,36 +22,9 @@ def test_desktop_package_module_runs_the_desktop_main(monkeypatch):
     assert exit_result.value.code == 23
 
 
-def test_legacy_gui_launcher_forwards_to_desktop_main(monkeypatch):
-    """Catch a regression that sends legacy GUI users back to Tkinter."""
-    desktop_main = importlib.import_module("desktop_app.main")
-
-    def fake_main():
-        return 17
-
-    monkeypatch.setattr(desktop_main, "main", fake_main)
-    legacy_gui = importlib.import_module("video_downloader_gui")
-    legacy_gui = importlib.reload(legacy_gui)
-
-    assert legacy_gui.main is fake_main
-
-
-def test_legacy_gui_launcher_exits_with_desktop_main_result(monkeypatch):
-    """Catch a wrapper that imports the app but does not execute it as a script."""
-    desktop_main = importlib.import_module("desktop_app.main")
-    monkeypatch.setattr(desktop_main, "main", lambda: 17)
-
-    import runpy
-
-    with pytest.raises(SystemExit) as exit_result:
-        runpy.run_module("video_downloader_gui", run_name="__main__")
-
-    assert exit_result.value.code == 17
-
-
-def test_download_video_keeps_the_legacy_callable_parameters():
-    """Catch accidental removal of CLI options consumed by existing callers."""
-    from universal_video_downloader import download_video
+def test_download_video_keeps_the_cli_callable_parameters():
+    """Catch accidental removal of CLI options consumed by programmatic callers."""
+    from desktop_app.cli import download_video
 
     assert list(inspect.signature(download_video).parameters) == [
         "url",
@@ -69,6 +42,10 @@ def test_readme_uses_the_desktop_module_command():
     readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
 
     assert "python -m desktop_app" in readme
+    assert "python -m desktop_app.cli" in readme
+    assert "python -m desktop_app.batch" in readme
+    assert "universal_video_downloader.py" not in readme
+    assert "video_downloader_gui.py" not in readme
 
 
 def test_release_metadata_agrees_on_v010_and_does_not_claim_tkinter_or_unlicensed_use():
@@ -78,8 +55,8 @@ def test_release_metadata_agrees_on_v010_and_does_not_claim_tkinter_or_unlicense
     setup = (root / "setup.py").read_text(encoding="utf-8").lower()
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8").lower()
 
-    assert 'version="0.1.0"' in setup
-    assert 'version = "0.1.0"' in pyproject
+    assert 'version="0.1.1"' in setup
+    assert 'version = "0.1.1"' in pyproject
     assert "tkinter" not in setup
     assert "always uses the automatic" not in readme
     assert "open-source and free" not in readme
@@ -116,9 +93,13 @@ def test_installed_gui_entry_point_declares_pyside6_runtime_dependency():
     setup_scripts = [item.value for item in console_scripts.elts]
 
     assert any(dependency.lower().startswith("pyside6") for dependency in metadata["project"]["dependencies"])
+    assert metadata["project"]["scripts"]["video-downloader"] == "desktop_app.cli:main"
     assert metadata["project"]["scripts"]["video-downloader-gui"] == "desktop_app.main:main"
+    assert metadata["project"]["scripts"]["video-downloader-batch"] == "desktop_app.batch:main"
     assert any(dependency.lower().startswith("pyside6") for dependency in setup_dependencies)
+    assert "video-downloader=desktop_app.cli:main" in setup_scripts
     assert "video-downloader-gui=desktop_app.main:main" in setup_scripts
+    assert "video-downloader-batch=desktop_app.batch:main" in setup_scripts
 
 
 def test_startup_behavior_opens_the_window_minimized_when_selected():

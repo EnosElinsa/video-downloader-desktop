@@ -54,7 +54,7 @@ class FallbackBackend(Protocol):
 
 class _DefaultYtdlpBackend:
     def build_options(self, request, format_selector, progress_hook, logger):
-        from universal_video_downloader import build_ytdlp_options
+        from .yt_dlp_adapter import build_ytdlp_options
 
         options = build_ytdlp_options(
             request.url, str(request.output_dir), request.use_proxy, request.proxy_url,
@@ -126,7 +126,7 @@ class DownloadService:
 
     def download(self, request: DownloadRequest, emit: Callable[[DownloadEvent], None],
                  cancel: Callable[[], bool] | None = None) -> DownloadResult:
-        from universal_video_downloader import get_rockstar_video_urls
+        from .urls import get_rockstar_video_urls
 
         try:
             normalized = normalize_http_url(request.url)

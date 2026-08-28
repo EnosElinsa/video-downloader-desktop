@@ -27,8 +27,8 @@ Public repository: [EnosElinsa/video-downloader-desktop](https://github.com/Enos
 python -m pip install -r requirements-desktop.txt
 ```
 
-The legacy `setup.py` script remains available for the original CLI/launcher
-workflow, but it is not required for the new desktop baseline.
+The package provides desktop, terminal, and Markdown batch entry points from
+the same `desktop_app` codebase.
 
 ### Manual Installation
 
@@ -71,7 +71,7 @@ Microsoft SmartScreen warning; verify the release checksum before choosing
 
 #### Building and publishing a release
 
-Push a semantic-version tag (for example, `v0.1.0`) to run the Windows release
+Push a semantic-version tag (for example, `v0.1.1`) to run the Windows release
 workflow. It installs Python 3.11 and the desktop/development requirements,
 runs the offscreen test suite, compiles the desktop package, executes packaged
 `--version` and offscreen GUI launch probes for both artifact forms, and attaches these files to the GitHub
@@ -89,7 +89,7 @@ provide a semantic version. To build locally on Windows, use PowerShell:
 ```
 python -m pip install -r requirements-desktop.txt
 python -m pip install -r requirements-dev.txt
-./packaging/build_windows.ps1 -Version 0.1.0
+./packaging/build_windows.ps1 -Version 0.1.1
 ```
 
 The normal release build ignores any `ffmpeg.exe` on `PATH` and downloads the
@@ -104,7 +104,7 @@ EXE before running it.
 ### Command Line Interface
 
 ```
-python universal_video_downloader.py
+python -m desktop_app.cli
 ```
 
 Follow the prompts to:
@@ -124,9 +124,17 @@ The GUI provides an easy-to-use interface for:
 - Configuring proxy settings
 - Monitoring download progress
 
-Existing shortcuts using `python video_downloader_gui.py` continue to launch
-the same PySide6 desktop app. See [the Windows user guide](docs/windows-user-guide.md)
+See [the Windows user guide](docs/windows-user-guide.md)
 for cookies, proxy, output-directory, retry, and SmartScreen guidance.
+
+### Markdown batch downloader
+
+```powershell
+python -m desktop_app.batch --source input.md --output videos
+```
+
+This optional command retains the structured chapter/section batch workflow
+without maintaining a separate legacy script.
 
 ## Configuration
 
@@ -137,8 +145,7 @@ The program saves your configuration preferences for:
 - Browser cookie source for authenticated videos
 
 The desktop app stores its settings under `%LOCALAPPDATA%\VideoDownloader`.
-The legacy CLI keeps its existing home-directory configuration file for
-backward compatibility.
+The terminal CLI stores its independent preferences in the user's home folder.
 
 ## Supported Sites
 

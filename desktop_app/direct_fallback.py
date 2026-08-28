@@ -42,7 +42,7 @@ class DirectMediaFallback:
             content_type = response.headers.get("content-type", "").lower()
             if content_type and not content_type.startswith("text/html"):
                 return None
-            from universal_video_downloader import extract_video_urls_from_html
+            from .urls import extract_video_urls_from_html
 
             candidates = extract_video_urls_from_html(response.text, request.url)
         finally:
@@ -91,7 +91,7 @@ class DirectMediaFallback:
         return self._get(url, **kwargs)
 
     def _download_direct(self, url, request, emit, cancel):
-        from universal_video_downloader import sanitize_filename
+        from .filenames import sanitize_filename
 
         parsed = urlsplit(url)
         filename = sanitize_filename(Path(unquote(parsed.path)).name)
@@ -165,7 +165,7 @@ def _reserve_destination(output_dir: Path, filename: str):
 
 def _requested_destination(url: str, request: DownloadRequest, fallback_name: str):
     """Resolve an optional yt-dlp template without evaluating arbitrary code."""
-    from universal_video_downloader import sanitize_filename
+    from .filenames import sanitize_filename
 
     template = request.output_template
     if not template:
