@@ -31,4 +31,4 @@
 - The render tool sets `QT_QPA_FONTDIR=C:\\Windows\\Fonts` for deterministic readable offscreen typography while production continues to request Segoe UI Variable/Segoe UI.
 
 ## Commit
-- `b18ea581d2bc1696a512effe3d73f9458ec5cbd5`
+- `613c59afe8f812e9b36dde623d9b8c8d813b251f`
