@@ -52,10 +52,12 @@ class AppSettings:
             return cls()
         # Missing ``version`` is the original v0 schema.  Keep migrations
         # named and explicit so a future payload is never silently downgraded.
-        try:
-            version = int(raw.get("version", 0))
-        except (TypeError, ValueError):
+        raw_version = raw.get("version", 0)
+        # ``bool`` is an ``int`` subclass, and JSON numbers/strings must not
+        # be coerced into a schema version.
+        if type(raw_version) is not int:
             return cls()
+        version = raw_version
         if version > cls.VERSION or version < 0:
             return cls()
         values = {f.name: raw[f.name] for f in fields(cls) if f.name in raw}

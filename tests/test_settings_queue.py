@@ -31,6 +31,14 @@ def test_settings_future_schema_is_ignored_without_downgrade(tmp_path):
     assert json.loads(path.read_text())["version"] == AppSettings.VERSION
 
 
+@pytest.mark.parametrize("version", [1.5, True, "1"])
+def test_settings_malformed_schema_version_uses_safe_defaults(tmp_path, version):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"version": version, "output_dir": "malformed"}))
+    loaded = AppSettings.load(path)
+    assert loaded.output_dir == AppSettings.default_output_dir()
+
+
 def test_settings_save_is_atomic_and_custom_path(tmp_path):
     path = tmp_path / "nested" / "settings.json"
     settings = AppSettings(output_dir=tmp_path / "downloads", cookie_browser="chrome")
