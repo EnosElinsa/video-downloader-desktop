@@ -4,9 +4,24 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
+from pathlib import Path
 from typing import Callable, Protocol, Any
 
 from .models import DownloadEvent, DownloadRequest, DownloadResult
+
+
+def bundled_ffmpeg_path() -> str | None:
+    """Return the packaged FFmpeg executable without consulting global PATH."""
+    if not getattr(sys, "frozen", False):
+        return None
+
+    roots = [Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)), Path(sys.executable).parent]
+    for root in roots:
+        candidate = root / "ffmpeg.exe"
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 class YtdlpBackend(Protocol):
@@ -28,6 +43,9 @@ class _DefaultYtdlpBackend:
             output_template=request.output_template,
         )
         options["progress_hooks"] = [progress_hook]
+        ffmpeg_path = bundled_ffmpeg_path()
+        if ffmpeg_path:
+            options["ffmpeg_location"] = ffmpeg_path
         return options
 
     def extract_info(self, url, options):
