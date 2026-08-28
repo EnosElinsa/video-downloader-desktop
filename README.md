@@ -2,6 +2,8 @@
 
 A powerful Python application that can download videos from almost any website.
 
+Public repository: [EnosElinsa/video-downloader-desktop](https://github.com/EnosElinsa/video-downloader-desktop) · [Download the latest Windows release](https://github.com/EnosElinsa/video-downloader-desktop/releases/latest)
+
 ## Features
 
 - **Wide compatibility**: Downloads videos from YouTube, Bilibili, Vimeo, Twitter, Instagram, and many more sites
