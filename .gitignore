@@ -32,6 +32,9 @@ cookies.txt
 *.cookie
 *.log
 logs/
+.test-tmp/
+.full-temp/
+.red-temp/
 
 # Editors and operating-system files
 .idea/
