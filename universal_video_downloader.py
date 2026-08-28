@@ -7,10 +7,19 @@ import time
 import json
 import html
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
+from uuid import uuid4
+
+from desktop_app.security import (
+    configured_secret_values,
+    install_redaction,
+    register_secret_values,
+    sanitize_message,
+)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
+install_redaction(logger)
 
 VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.flv', '.webm', '.m4v', '.ts', '.m3u8', '.mpd')
 DEFAULT_USER_AGENT = (
@@ -115,12 +124,20 @@ def get_rockstar_video_urls(url):
     ]
 
 
+def default_output_template(output_dir='.'):
+    """Return one collision-resistant template for a logical request."""
+    token = uuid4().hex
+    return os.path.join(
+        output_dir, f'video_%(title).120B_%(id)s_{token}.%(ext)s'
+    )
+
+
 def build_ytdlp_options(url, output_dir='.', use_proxy=False, proxy_url=None,
                         format_selector='bv*+ba/b', cookie_browser=None,
                         output_template=None):
     """Build resilient yt-dlp options shared by CLI, GUI, and fallbacks."""
     if output_template is None:
-        output_template = os.path.join(output_dir, f'video_{int(time.time())}.%(ext)s')
+        output_template = default_output_template(output_dir)
 
     options = {
         'format': format_selector,
@@ -173,10 +190,12 @@ def _is_format_error(error):
     )
 
 
-def _log_download_error(error):
+def _log_download_error(error, proxy_url=None):
     # yt-dlp may include terminal colour escapes; they make GUI logs hard to
     # read and can obscure the actionable part of the error.
-    message = re.sub(r'\x1b\[[0-9;]*m', '', str(error))
+    secrets = configured_secret_values(proxy_url)
+    register_secret_values(secrets)
+    message = sanitize_message(error, secrets)
     lower_message = message.lower()
     if 'sign in to confirm your age' in lower_message or 'age-restricted' in lower_message:
         logger.error(
@@ -324,10 +343,17 @@ def download_with_ytdlp(url, output_dir='.', use_proxy=False, proxy_url=None,
     """Download with yt-dlp, retrying a format failure with a safe fallback."""
     import yt_dlp
 
-    url = normalize_url(url)
-    if not url:
+    from desktop_app.urls import normalize_http_url
+
+    try:
+        url = normalize_http_url(url)
+    except ValueError:
         logger.error('The URL is empty or invalid.')
         return False
+
+    register_secret_values(configured_secret_values(proxy_url))
+    if output_template is None:
+        output_template = default_output_template(output_dir)
 
     # `bv*+ba/b` handles sites that expose separate video/audio streams while
     # retaining the single-file `best` branch for direct files and older sites.
@@ -350,7 +376,13 @@ def download_with_ytdlp(url, output_dir='.', use_proxy=False, proxy_url=None,
                 if not info:
                     raise yt_dlp.utils.DownloadError('No video information was returned.')
 
-                logger.info(f"Video found: {info.get('title', 'Unknown title')}")
+                logger.info(
+                    "Video found: %s",
+                    sanitize_message(
+                        info.get("title", "Unknown title"),
+                        configured_secret_values(proxy_url),
+                    ),
+                )
                 logger.info(f"Duration: {format_duration(info.get('duration', 0))}")
                 selected_format = choose_format_for_context(
                     info.get('formats', []), requested=interactive_selection_pending
@@ -375,12 +407,15 @@ def download_with_ytdlp(url, output_dir='.', use_proxy=False, proxy_url=None,
             return True
 
         except yt_dlp.utils.DownloadError as error:
-            _log_download_error(error)
+            _log_download_error(error, proxy_url)
             if attempt == 0 and _is_format_error(error):
                 continue
             break
         except Exception as error:
-            logger.error(f"An error occurred: {error}")
+            logger.error(
+                "An error occurred: %s",
+                sanitize_message(error, configured_secret_values(proxy_url)),
+            )
             break
 
     return False
@@ -411,7 +446,7 @@ def print_progress(d):
     elif d['status'] == 'finished':
         # Move to next line after download finishes
         print("")
-        logger.info(f"Download complete: {d['filename']}")
+        logger.info("Download complete: %s", sanitize_message(d["filename"]))
 
 def format_size(bytes_size):
     """Format size in bytes to human-readable format."""
@@ -444,138 +479,91 @@ def format_duration(seconds):
 
 def try_fallback_methods(url, output_dir='.', use_proxy=False, proxy_url=None,
                          cookie_browser=None):
-    """Try direct files and media URLs embedded in unsupported pages."""
-    logger.info("Attempting fallback methods for unsupported URL...")
-    
-    # Method 1: Direct download for specific types
-    import requests
-    
+    """Compatibility wrapper over the service-owned nonrecursive fallback."""
+    from pathlib import Path
+
+    from desktop_app.direct_fallback import DirectMediaFallback
+    from desktop_app.models import DownloadRequest, DownloadResult
+    from desktop_app.urls import normalize_http_url
+
     try:
-        url = normalize_url(url)
-        headers = {
-            'User-Agent': DEFAULT_USER_AGENT,
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': url,
-        }
-        request_kwargs = {'headers': headers, 'timeout': 30}
-        if use_proxy and proxy_url:
-            request_kwargs['proxies'] = {'http': proxy_url, 'https': proxy_url}
-        
-        # Check if this is a direct video URL
-        parsed_url = urlparse(url)
-        path = parsed_url.path.lower()
-        
-        if path.endswith(('.m3u8', '.mpd')):
-            logger.info("Direct streaming manifest detected. Passing it to yt-dlp...")
-            return download_with_ytdlp(
-                url, output_dir, use_proxy, proxy_url, False, cookie_browser
-            )
+        normalized = normalize_http_url(url)
+    except ValueError:
+        logger.error("The URL is empty or invalid.")
+        return False
+    secrets = configured_secret_values(proxy_url)
+    register_secret_values(secrets)
+    request = DownloadRequest(
+        normalized,
+        Path(output_dir),
+        use_proxy=use_proxy,
+        proxy_url=proxy_url,
+        cookie_browser=cookie_browser,
+    )
 
-        if path.endswith(VIDEO_EXTENSIONS[:-2]):
-            logger.info("Direct video link detected. Attempting direct download...")
-            response = requests.get(url, stream=True, **request_kwargs)
-            
-            if response.status_code == 200:
-                # Extract filename from URL or use the timestamp
-                filename = os.path.basename(parsed_url.path)
-                if not filename:
-                    filename = f"video_{int(time.time())}{os.path.splitext(path)[1]}"
-                
-                filename = sanitize_filename(filename)
-                file_path = os.path.join(output_dir, filename)
-                
-                total_size = int(response.headers.get('content-length', 0))
-                downloaded = 0
-                chunk_size = 1024 * 1024  # 1 MB chunks
-                
-                logger.info(f"Starting direct download of {filename}")
-                
-                with open(file_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=chunk_size):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            
-                            if total_size > 0:
-                                percent = downloaded / total_size * 100
-                                print(f"\r{percent:.1f}% ({format_size(downloaded)}/{format_size(total_size)})", end='', flush=True)
-                
-                print("")  # New line after progress
-                logger.info(f"Download complete: {file_path}")
-                return True
-            else:
-                logger.error(f"HTTP error: {response.status_code}")
-        else:
-            logger.info("Not a direct video link. Attempting to extract video from page...")
-            
-            # Try to get the page and extract video links
-            response = requests.get(url, **request_kwargs)
-            content_type = response.headers.get('content-type', '').lower()
-            # Some servers omit Content-Type for otherwise ordinary HTML pages;
-            # keep that legacy-compatible case parseable as HTML.
-            if response.status_code == 200 and (not content_type or content_type.startswith('text/html')):
-                html_content = response.text
+    def emit(event):
+        if event.message:
+            logger.info(sanitize_message(event.message, secrets))
 
-                video_urls = extract_video_urls_from_html(html_content, url)
-                if video_urls:
-                    logger.info(f"Found {len(video_urls)} video links in the page.")
-                    for i, match in enumerate(video_urls):
-                        logger.info(f"Trying video link {i + 1}: {match}")
-                        if download_video(
-                            match, output_dir, use_proxy, proxy_url,
-                            False, cookie_browser
-                        ):
-                            return True
-                else:
-                    logger.error("Could not find any video links on the page.")
-            elif response.status_code == 200:
-                logger.error(
-                    'The URL returned unexpected non-HTML content; no embedded media links can be extracted.'
-                )
-            else:
-                logger.error(f"HTTP error: {response.status_code}")
-    
-    except Exception as e:
-        logger.error(f"Fallback method failed: {e}")
-    
-    logger.error("All download methods failed. This URL may not be supported.")
-    return False
+    def download_manifest(media_url):
+        success = download_with_ytdlp(
+            media_url,
+            output_dir,
+            use_proxy,
+            proxy_url,
+            False,
+            cookie_browser,
+            request.output_template,
+        )
+        return DownloadResult(bool(success), None, None, None if success else "download_failed", None)
+
+    try:
+        result = DirectMediaFallback().attempt(
+            request, emit, lambda: False, download_manifest
+        )
+    except Exception as error:
+        logger.error("Fallback method failed: %s", sanitize_message(error, secrets))
+        return False
+    return bool(result)
 
 def download_video(url, output_dir='.', use_proxy=False, proxy_url=None,
                    select_format=False, cookie_browser=None, output_template=None):
     """Main function to download video from URL.
 
-    The typed Qt-free service owns generic yt-dlp orchestration while this
-    compatibility entry point retains Rockstar CDN and HTML fallback handling.
-    ``DownloadResult`` implements truthiness for existing callers.
+    The Qt-free service owns Rockstar, yt-dlp, and HTML/direct-media fallback
+    orchestration. ``DownloadResult`` keeps truthiness for existing callers.
     """
     from pathlib import Path
     from desktop_app.download_core import DownloadService
     from desktop_app.models import DownloadRequest, DownloadResult
+    from desktop_app.urls import normalize_http_url
 
-    normalized_url = normalize_url(url)
-    if not normalized_url or not urlparse(normalized_url).scheme:
-        logger.error(f"Invalid URL: {url}")
-        return DownloadResult(False, None, None, "invalid_url", f"Invalid URL: {url}")
-    logger.info(f"Attempting to download video from: {normalized_url}")
-
-    # Rockstar's current page is a JavaScript shell; use its documented public
-    # CDN path before asking yt-dlp's generic extractor to parse the shell.
-    rockstar_urls = get_rockstar_video_urls(normalized_url)
-    if rockstar_urls:
-        logger.info('Detected Rockstar Games video page; trying direct CDN variants.')
-        for direct_url in rockstar_urls:
-            logger.info(f'Trying Rockstar media URL: {direct_url}')
-            if download_with_ytdlp(
-                direct_url, output_dir, use_proxy, proxy_url, select_format,
-                cookie_browser, output_template
-            ):
-                return DownloadResult(True, None, None, None, None)
+    try:
+        normalized_url = normalize_http_url(url)
+    except ValueError:
+        message = "Enter a valid HTTP(S) URL with a hostname."
+        logger.error(message)
+        return DownloadResult(False, None, None, "invalid_url", message)
+    logger.info(
+        "Attempting to download video from: %s",
+        sanitize_message(normalized_url, configured_secret_values(proxy_url)),
+    )
 
     # The CLI's optional interactive format picker needs yt-dlp's format list,
     # so retain the established legacy path only when the user requested it.
     # Normal GUI/programmatic downloads continue through the typed service.
     if select_format:
+        for direct_url in get_rockstar_video_urls(normalized_url):
+            if download_with_ytdlp(
+                direct_url,
+                output_dir,
+                use_proxy,
+                proxy_url,
+                True,
+                cookie_browser,
+                output_template,
+            ):
+                return DownloadResult(True, None, None, None, None)
         selected_success = download_with_ytdlp(
             normalized_url, output_dir, use_proxy, proxy_url, True,
             cookie_browser, output_template,
@@ -591,20 +579,17 @@ def download_video(url, output_dir='.', use_proxy=False, proxy_url=None,
 
     def emit(event):
         if event.message:
-            logger.info(event.message)
+            logger.info(
+                "%s",
+                sanitize_message(event.message, configured_secret_values(proxy_url)),
+            )
         if event.kind == 'finished' and event.filename:
-            logger.info(f"Download complete: {event.filename}")
+            logger.info(
+                "Download complete: %s",
+                sanitize_message(event.filename, configured_secret_values(proxy_url)),
+            )
 
-    result = DownloadService().download(request, emit)
-    if result:
-        return result
-
-    # If yt-dlp fails, try fallback methods
-    fallback_ok = try_fallback_methods(
-        normalized_url, output_dir, use_proxy, proxy_url, cookie_browser)
-    if fallback_ok:
-        return DownloadResult(True, None, None, None, None)
-    return result
+    return DownloadService().download(request, emit)
 
 def save_config(config):
     """Save configuration to a file."""
@@ -615,7 +600,7 @@ def save_config(config):
         with open(config_file, 'w') as f:
             json.dump(config, f)
     except Exception as e:
-        logger.error(f"Failed to save configuration: {e}")
+        logger.error("Failed to save configuration: %s", sanitize_message(e))
 
 def load_config():
     """Load configuration from a file."""
@@ -627,7 +612,7 @@ def load_config():
             with open(config_file, 'r') as f:
                 return json.load(f)
     except Exception as e:
-        logger.error(f"Failed to load configuration: {e}")
+        logger.error("Failed to load configuration: %s", sanitize_message(e))
     
     # Default configuration
     return {
@@ -666,7 +651,12 @@ def main():
             print(f"1. Output directory: {config['output_dir']}")
             print(f"2. Use proxy: {config['use_proxy']}")
             if config['use_proxy']:
-                print(f"3. Proxy URL: {config['proxy_url']}")
+                print(
+                    "3. Proxy URL: "
+                    + sanitize_message(
+                        config["proxy_url"], configured_secret_values(config["proxy_url"])
+                    )
+                )
             print(f"4. Select video format: {config['select_format']}")
             print(f"5. Cookies from browser: {config.get('cookie_browser', '') or 'none'}")
             print("6. Back to main menu")
@@ -686,7 +676,7 @@ def main():
                             config['output_dir'] = new_dir
                             logger.info(f"Created directory: {new_dir}")
                         except Exception as e:
-                            logger.error(f"Failed to create directory: {e}")
+                            logger.error("Failed to create directory: %s", sanitize_message(e))
             
             elif choice == '2':
                 use_proxy = input("Use proxy? (y/n): ").strip().lower()
@@ -716,7 +706,7 @@ def main():
         # Normalize Markdown/chat formatting and add https:// when omitted.
         normalized_url = normalize_url(url)
         if normalized_url != url:
-            logger.info(f"Normalized URL: {normalized_url}")
+            logger.info("Normalized URL: %s", sanitize_message(normalized_url))
         url = normalized_url
         
         # Download the video with current configuration

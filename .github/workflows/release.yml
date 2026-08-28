@@ -40,7 +40,8 @@ jobs:
       - name: Run test suite (offscreen)
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q
+          QT_QPA_FONTDIR: C:\Windows\Fonts
+        run: python -m pytest -q -p no:cacheprovider
 
       - name: Build Windows 10/11 x64 artifacts
         shell: pwsh
@@ -70,6 +71,16 @@ jobs:
             $version = $env:GITHUB_REF_NAME -replace '^v', ''
           }
           python packaging/smoke_test.py --exe dist/VideoDownloader-windows-x64.exe --expected-version $version
+
+      - name: Run packaged GUI launch probe
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QPA_FONTDIR: C:\Windows\Fonts
+        run: |
+          python packaging/gui_probe.py --exe dist/VideoDownloader-windows-x64/VideoDownloader-windows-x64.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python packaging/gui_probe.py --exe dist/VideoDownloader-windows-x64.exe
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3

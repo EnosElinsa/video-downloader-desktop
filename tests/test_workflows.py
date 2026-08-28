@@ -127,6 +127,7 @@ def test_release_is_tagged_windows_release_with_write_permission_and_artifacts()
     commands = "\n".join(step.get("run", "") for step in _steps(workflow))
     assert "build_windows.ps1" in commands
     assert "packaging/smoke_test.py" in commands
+    assert "packaging/gui_probe.py" in commands
 
     release_step = next(
         step for step in _steps(workflow) if step.get("uses", "").startswith("softprops/action-gh-release@")

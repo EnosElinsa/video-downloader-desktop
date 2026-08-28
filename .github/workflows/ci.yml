@@ -29,4 +29,5 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q
+          QT_QPA_FONTDIR: C:\Windows\Fonts
+        run: python -m pytest -q -p no:cacheprovider

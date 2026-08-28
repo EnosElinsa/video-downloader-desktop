@@ -17,6 +17,10 @@ if not FFMPEG_PATH.is_file() or FFMPEG_PATH.name.lower() != "ffmpeg.exe":
     raise FileNotFoundError(f"A verified ffmpeg.exe is required: {FFMPEG_PATH}")
 
 datas = []
+icon_path = ROOT / "assets" / "video-downloader.ico"
+if not icon_path.is_file():
+    raise FileNotFoundError(f"Runtime icon is required: {icon_path}")
+datas.append((str(icon_path), "assets"))
 datas += collect_data_files("PySide6", subdir="plugins/platforms")
 datas += collect_data_files("yt_dlp")
 datas += collect_data_files("requests")

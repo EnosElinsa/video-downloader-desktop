@@ -24,10 +24,67 @@ class AppSettings:
     theme: str = "dark"
 
     def __post_init__(self) -> None:
-        if self.output_dir is None:
+        if not isinstance(self.output_dir, (str, os.PathLike)) or not str(self.output_dir).strip():
             self.output_dir = self.default_output_dir()
         else:
-            self.output_dir = Path(self.output_dir)
+            try:
+                self.output_dir = Path(self.output_dir)
+                if self.output_dir.exists() and not self.output_dir.is_dir():
+                    self.output_dir = self.default_output_dir()
+            except (TypeError, ValueError, OSError):
+                self.output_dir = self.default_output_dir()
+        if not isinstance(self.format_selector, str) or self.format_selector not in {"bv*+ba/b", "best"}:
+            self.format_selector = "bv*+ba/b"
+        self.use_proxy = self._coerce_bool(self.use_proxy, False)
+        if not isinstance(self.proxy_url, str) or not self.proxy_url.strip():
+            self.proxy_url = None
+        else:
+            self.proxy_url = self.proxy_url.strip()
+        allowed_browsers = {"chrome", "edge", "firefox", "brave", "opera", "chromium"}
+        if isinstance(self.cookie_browser, str):
+            self.cookie_browser = self.cookie_browser.strip().lower() or None
+        if self.cookie_browser not in allowed_browsers:
+            self.cookie_browser = None
+        self.concurrent_downloads = self._bounded_int(
+            self.concurrent_downloads, default=2, minimum=1, maximum=8
+        )
+        if self.startup_behavior not in {"normal", "minimized"}:
+            self.startup_behavior = "normal"
+        if self.theme not in {"dark", "light"}:
+            self.theme = "dark"
+        if self.proxy_url:
+            from urllib.parse import urlparse
+
+            parsed_proxy = urlparse(self.proxy_url)
+            try:
+                parsed_proxy.port
+            except ValueError:
+                parsed_proxy = None
+            if parsed_proxy is None or parsed_proxy.scheme not in {"http", "https", "socks5", "socks5h"} or not parsed_proxy.hostname:
+                self.proxy_url = None
+                self.use_proxy = False
+
+    @staticmethod
+    def _coerce_bool(value: Any, default: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"true", "yes", "1", "on"}:
+                return True
+            if lowered in {"false", "no", "0", "off"}:
+                return False
+        return default
+
+    @staticmethod
+    def _bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
+        if isinstance(value, bool):
+            return default
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return default
+        return max(minimum, min(maximum, parsed))
 
     @classmethod
     def app_dir(cls) -> Path:
@@ -68,7 +125,23 @@ class AppSettings:
                 return cls()
             values = migration(values)
             version += 1
-        return cls(**values)
+        defaults = cls()
+        if not isinstance(values.get("output_dir"), (str, os.PathLike)):
+            values["output_dir"] = defaults.output_dir
+        if not isinstance(values.get("format_selector"), str) or values.get("format_selector") not in {"bv*+ba/b", "best"}:
+            values["format_selector"] = defaults.format_selector
+        if not isinstance(values.get("proxy_url"), (str, type(None))):
+            values["proxy_url"] = defaults.proxy_url
+        if not isinstance(values.get("cookie_browser"), (str, type(None))):
+            values["cookie_browser"] = defaults.cookie_browser
+        if not isinstance(values.get("startup_behavior"), str):
+            values["startup_behavior"] = defaults.startup_behavior
+        if not isinstance(values.get("theme"), str):
+            values["theme"] = defaults.theme
+        try:
+            return cls(**values)
+        except (TypeError, ValueError, OSError):
+            return defaults
 
     @staticmethod
     def _migrate_v0_to_v1(values: dict[str, Any]) -> dict[str, Any]:

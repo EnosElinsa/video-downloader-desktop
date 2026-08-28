@@ -6,10 +6,12 @@ import subprocess
 import sys
 import argparse
 import logging
+from desktop_app.security import install_redaction, sanitize_message
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+install_redaction(logger)
 
 def setup_environment():
     """Check if yt-dlp is installed, install if necessary."""
@@ -64,7 +66,11 @@ def parse_markdown_file(file_path):
         urls = re.findall(url_pattern, line)
         if urls and current_section is not None:
             for url in urls:
-                logger.info(f"Found video URL in section {current_section['number']}: {url}")
+                logger.info(
+                    "Found video URL in section %s: %s",
+                    current_section["number"],
+                    sanitize_message(url),
+                )
                 description = line.split(url)[0].strip() if url in line else ""
                 current_section['videos'].append({
                     'url': url,
@@ -82,7 +88,7 @@ def parse_markdown_file(file_path):
             for section in chapter['sections']:
                 logger.debug(f"  Section: {section['number']} - {section['title']}")
                 for i, video in enumerate(section['videos'], 1):
-                    logger.debug(f"    Video {i}: {video['url']}")
+                    logger.debug("    Video %s: %s", i, sanitize_message(video["url"]))
     
     return chapter_data
 
@@ -143,7 +149,7 @@ def download_videos(chapter_data, base_dir='videos'):
                 video_name = f"{i}_{sanitize_filename(desc[:30] if desc else 'video')}"
                 
                 logger.info(f"\nDownloading video {i} in section {section['number']} of {chapter['number']}:")
-                logger.info(f"URL: {url}")
+                logger.info("URL: %s", sanitize_message(url))
                 logger.info(f"Saving to: {download_path}/{video_name}")
                 
                 try:
@@ -158,7 +164,11 @@ def download_videos(chapter_data, base_dir='videos'):
                     logger.info(f"Successfully downloaded: {video_name}")
                     
                 except Exception as e:
-                    logger.error(f"Error downloading {url}: {e}")
+                    logger.error(
+                        "Error downloading %s: %s",
+                        sanitize_message(url),
+                        sanitize_message(e),
+                    )
                     # Save unsupported URL to the file for manual download
                     with open(unsupported_urls_file, "a", encoding="utf-8") as f:
                         f.write(f"Chapter: {chapter['number']} - {chapter['title']}\n")

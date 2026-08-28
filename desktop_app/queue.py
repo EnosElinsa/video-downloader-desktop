@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from .models import DownloadRequest
+from .security import configured_secret_values, sanitize_message
 
 STATUSES = frozenset({"queued", "running", "paused", "success", "failed", "cancelled"})
 _TRANSITIONS = {
@@ -74,6 +75,10 @@ class DownloadQueue:
             for key, value in updates.items():
                 if key not in {"title", "percent", "speed", "eta", "filename", "error", "error_code"}:
                     raise ValueError(f"invalid queue field: {key}")
+                if key in {"title", "filename", "error"} and value is not None:
+                    value = sanitize_message(
+                        value, configured_secret_values(item.request.proxy_url)
+                    )
                 setattr(item, key, value)
 
     def cancel(self, item_id: str) -> None:
@@ -110,7 +115,7 @@ class DownloadQueue:
     def snapshot(self) -> list[dict[str, Any]]:
         with self._lock:
             return [
-                {"id": i.id, "url": i.request.url, "output_dir": str(i.request.output_dir),
+                {"id": i.id, "url": sanitize_message(i.request.url, configured_secret_values(i.request.proxy_url)), "output_dir": str(i.request.output_dir),
                  "format_selector": i.request.format_selector, "status": i.status,
                  "title": i.title, "percent": i.percent, "speed": i.speed, "eta": i.eta,
                  "filename": i.filename, "error": i.error, "error_code": i.error_code}

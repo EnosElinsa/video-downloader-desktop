@@ -51,8 +51,13 @@ network, cookie, or proxy problem, and choose **Retry** for that row. Retrying
 immediately starts a fresh download attempt; it does not mark a download
 successful until the downloader itself has completed.
 
-The desktop app automatically selects the best compatible video and audio
-format. Run the CLI instead if you need to choose a specific format yourself.
+The desktop app defaults to **Automatic (best)** and also offers **Best single
+file** in the Quality control. Run the CLI if you need to choose a specific
+format interactively.
+
+Activity is collapsed by default and can be cleared from the drawer. Detailed
+level/item filtering is planned for post-v0.1; v0.1 always applies secret
+sanitization before activity is shown.
 
 ## Microsoft SmartScreen
 

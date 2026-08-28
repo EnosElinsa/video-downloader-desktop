@@ -45,14 +45,27 @@ class DownloaderUrlTests(unittest.TestCase):
             ],
         )
 
-    @patch.object(downloader, "download_with_ytdlp", return_value=True)
-    def test_download_video_uses_normalized_rockstar_cdn_url(self, download_mock):
+    def test_download_video_delegates_normalized_url_to_shared_service_once(self):
         raw = r"[Rockstar](https://www.rockstargames.com/videos/rk721912?resolution=2160p\&embed)"
 
-        self.assertTrue(downloader.download_video(raw, output_dir="downloads"))
+        class FakeService:
+            requests = []
+
+            def download(self, request, emit, cancel=None):
+                from desktop_app.models import DownloadResult
+
+                self.__class__.requests.append(request)
+                return DownloadResult(True, "demo.mp4", "Demo", None, None)
+
+        with patch("desktop_app.download_core.DownloadService", FakeService), \
+                patch.object(downloader, "download_with_ytdlp", return_value=False) as legacy_download:
+            self.assertTrue(downloader.download_video(raw, output_dir="downloads"))
+
+        self.assertEqual(len(FakeService.requests), 1)
+        legacy_download.assert_not_called()
         self.assertEqual(
-            download_mock.call_args.args[0],
-            "https://videos-rockstargames-com.akamaized.net/v4/rk721912/flv/en-us-2160p.mp4",
+            FakeService.requests[0].url,
+            "https://www.rockstargames.com/videos/rk721912?resolution=2160p&embed",
         )
 
     @patch.object(downloader, "download_with_ytdlp", return_value=True)
@@ -164,7 +177,7 @@ class DownloaderFallbackTests(unittest.TestCase):
         response.encoding = "utf-8"
 
         with patch("requests.get", return_value=response), \
-                patch.object(downloader, "download_video", return_value=True) as download_mock:
+                patch.object(downloader, "download_with_ytdlp", return_value=True) as download_mock:
             self.assertTrue(downloader.try_fallback_methods("https://example.test/watch", output_dir="downloads"))
 
         self.assertEqual(download_mock.call_args.args[0], "https://example.test/assets/clip.m3u8")
@@ -178,7 +191,7 @@ class DownloaderFallbackTests(unittest.TestCase):
         response.encoding = "utf-8"
 
         with patch("requests.get", return_value=response) as requests_get, \
-                patch.object(downloader, "download_video", return_value=True) as download_mock:
+                patch.object(downloader, "download_with_ytdlp", return_value=True) as download_mock:
             self.assertTrue(
                 downloader.try_fallback_methods(
                     "https://example.test/watch",
@@ -196,6 +209,23 @@ class DownloaderFallbackTests(unittest.TestCase):
             requests_get.call_args.kwargs["proxies"],
             {"http": "http://127.0.0.1:8080", "https": "http://127.0.0.1:8080"},
         )
+
+    def test_legacy_error_logger_redacts_proxy_userinfo_and_known_credentials(self):
+        proxy = "http://legacy-user:legacy-secret@proxy.example"
+
+        with self.assertLogs(downloader.logger, level="ERROR") as captured:
+            downloader._log_download_error(
+                RuntimeError(
+                    "failed through http://legacy-user:legacy-secret@proxy.example "
+                    "token=legacy-token"
+                ),
+                proxy,
+            )
+
+        output = " ".join(captured.output)
+        for secret in ("legacy-user", "legacy-secret", "legacy-token"):
+            self.assertNotIn(secret, output)
+        self.assertIn("http://proxy.example", output)
 
 
 if __name__ == "__main__":

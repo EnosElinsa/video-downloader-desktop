@@ -15,6 +15,12 @@ htmlcov/
 build/
 dist/
 .test-tmp/
+.full-temp/
+.red-temp/
+.temp-green/
+.temp-red/
+.stale-build-acl/
+.tools/
 *.spec.bak
 *.egg-info/
 
@@ -33,11 +39,9 @@ cookies.txt
 *.cookie
 *.log
 logs/
-.test-tmp/
-.full-temp/
-.red-temp/
-.tools/
-.stale-build-acl/
+source.md
+.superpowers/sdd/
+docs/superpowers/plans/
 
 # Editors and operating-system files
 .idea/

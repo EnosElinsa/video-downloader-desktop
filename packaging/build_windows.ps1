@@ -58,6 +58,10 @@ Assert-ExitCode "Windows x64 release environment validation"
 function Resolve-FFmpegExecutable {
     param([string]$RequestedPath)
 
+    $archiveUrl = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip"
+    $checksumUrl = "$archiveUrl.sha256"
+    $pinnedSha256 = "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec"
+
     if ($RequestedPath) {
         $candidate = [System.IO.Path]::GetFullPath($RequestedPath)
         if ([System.IO.Directory]::Exists($candidate)) {
@@ -66,19 +70,40 @@ function Resolve-FFmpegExecutable {
         if (-not [System.IO.File]::Exists($candidate)) {
             throw "-FFmpegPath does not resolve to ffmpeg.exe: $candidate"
         }
+        if ([System.IO.Path]::GetFileName($candidate).ToLowerInvariant() -ne "ffmpeg.exe") {
+            throw "-FFmpegPath must name ffmpeg.exe: $candidate"
+        }
+        $digestFile = "${candidate}.sha256"
+        if (-not (Test-Path -LiteralPath $digestFile -PathType Leaf)) {
+            throw "Explicit -FFmpegPath requires a matching ffmpeg.exe.sha256 allowlist file."
+        }
+        $expected = (Get-Content -Raw -LiteralPath $digestFile).Trim().Split()[0].ToLowerInvariant()
+        if ($expected -notmatch '^[0-9a-f]{64}$') {
+            throw "Explicit FFmpeg digest provenance is malformed: $digestFile"
+        }
+        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $candidate).Hash.ToLowerInvariant()
+        if ($actual -ne $expected) {
+            throw "Explicit FFmpeg digest mismatch: expected $expected, got $actual"
+        }
+        $allowed = $env:VIDEO_DOWNLOADER_ALLOWED_FFMPEG_SHA256
+        if (-not $allowed -or ($allowed.ToLowerInvariant().Split(',') -notcontains $actual)) {
+            throw "Explicit -FFmpegPath digest is not in VIDEO_DOWNLOADER_ALLOWED_FFMPEG_SHA256."
+        }
+        $parent = Split-Path $candidate -Parent
+        $provenance = @(
+            (Join-Path $parent "LICENSE"),
+            (Join-Path $parent "README.txt"),
+            (Join-Path (Split-Path $parent -Parent) "LICENSE"),
+            (Join-Path (Split-Path $parent -Parent) "README.txt")
+        ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
+        if (-not $provenance) {
+            throw "Explicit -FFmpegPath requires adjacent license/provenance documentation."
+        }
         return $candidate
-    }
-
-    $command = Get-Command ffmpeg.exe -ErrorAction SilentlyContinue
-    if ($command -and [System.IO.File]::Exists($command.Source)) {
-        return [System.IO.Path]::GetFullPath($command.Source)
     }
 
     # FFmpeg lists Gyan's Windows builds on its official download page. Pinning
     # both the release and digest makes automated public-release builds repeatable.
-    $archiveUrl = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip"
-    $checksumUrl = "$archiveUrl.sha256"
-    $pinnedSha256 = "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec"
     $vendorRoot = Join-Path $buildRoot "vendor/ffmpeg"
     $archivePath = Join-Path $vendorRoot "ffmpeg-8.1.2-essentials_build.zip"
     $vendorChecksumPath = Join-Path $vendorRoot "ffmpeg-8.1.2-essentials_build.zip.sha256"
@@ -197,6 +222,8 @@ $versionModule = Join-Path $generatedDir "video_downloader_build_version.py"
 
 $env:VIDEO_DOWNLOADER_GENERATED_DIR = $generatedDir
 $env:VIDEO_DOWNLOADER_FFMPEG_PATH = $resolvedFFmpeg
+$env:VIDEO_DOWNLOADER_FFMPEG_LICENSE = ""
+$env:VIDEO_DOWNLOADER_FFMPEG_README = ""
 $ffmpegDocs = @"
 import sys
 from pathlib import Path
@@ -233,6 +260,10 @@ python (Join-Path $PSScriptRoot "smoke_test.py") --exe (Join-Path $oneFolder "$a
 Assert-ExitCode "One-folder smoke test"
 python (Join-Path $PSScriptRoot "smoke_test.py") --exe $oneFile --expected-version $Version
 Assert-ExitCode "One-file smoke test"
+python (Join-Path $PSScriptRoot "gui_probe.py") --exe (Join-Path $oneFolder "$artifactBase.exe")
+Assert-ExitCode "One-folder GUI launch probe"
+python (Join-Path $PSScriptRoot "gui_probe.py") --exe $oneFile
+Assert-ExitCode "One-file GUI launch probe"
 
 $checksumLines = foreach ($artifact in @($zipPath, $oneFile)) {
     $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant()

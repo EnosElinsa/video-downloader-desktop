@@ -39,7 +39,7 @@ If you prefer manual installation:
 pip install yt-dlp>=2023.3.4 requests>=2.25.0
 ```
 
-2. The desktop app uses PySide6 and does not require tkinter.
+2. The desktop app uses PySide6.
 
 ## Usage
 
@@ -71,8 +71,8 @@ Microsoft SmartScreen warning; verify the release checksum before choosing
 
 Push a semantic-version tag (for example, `v0.1.0`) to run the Windows release
 workflow. It installs Python 3.11 and the desktop/development requirements,
-runs the offscreen test suite, compiles the desktop package, executes the
-packaged `--version` smoke test, and attaches these files to the GitHub
+runs the offscreen test suite, compiles the desktop package, executes packaged
+`--version` and offscreen GUI launch probes for both artifact forms, and attaches these files to the GitHub
 Release:
 
 ```
@@ -89,6 +89,11 @@ python -m pip install -r requirements-desktop.txt
 python -m pip install -r requirements-dev.txt
 ./packaging/build_windows.ps1 -Version 0.1.0
 ```
+
+The normal release build ignores any `ffmpeg.exe` on `PATH` and downloads the
+pinned SHA-256-verified FFmpeg distribution. Advanced `-FFmpegPath` use requires
+an adjacent `ffmpeg.exe.sha256`, adjacent license/provenance documentation, and
+an exact digest listed in `VIDEO_DOWNLOADER_ALLOWED_FFMPEG_SHA256`.
 
 The initial Windows 10/11 artifacts are unsigned, so SmartScreen may warn
 users on first launch. Verify `SHA256SUMS.txt` against the downloaded ZIP or
@@ -162,12 +167,13 @@ If you encounter issues:
 6. **Desktop app will not start**: Install the packages in
    `requirements-desktop.txt` and launch it with `python -m desktop_app`.
 
-The GUI always uses the automatic best-quality selector so downloads never wait
-for a terminal prompt. Use the CLI if you need to choose an individual format.
+The GUI defaults to **Automatic (best)** and also offers **Best single file**.
+Use the CLI if you need to choose an individual format interactively.
 
 ## License
 
-This software is open-source and free to use for personal purposes.
+No license is granted by this repository yet. Add a license before redistributing
+the source or artifacts.
 
 ## Acknowledgments
 

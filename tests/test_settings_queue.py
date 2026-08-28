@@ -49,6 +49,45 @@ def test_settings_save_is_atomic_and_custom_path(tmp_path):
     assert not path.with_suffix(".tmp").exists()
 
 
+def test_settings_load_coerces_supported_values_and_bounds_malformed_fields(tmp_path):
+    """Catch valid JSON with bad field types aborting window construction."""
+    path = tmp_path / "settings.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": AppSettings.VERSION,
+                "output_dir": 42,
+                "format_selector": ["best"],
+                "use_proxy": "false",
+                "proxy_url": {"secret": "value"},
+                "cookie_browser": "unknown-browser",
+                "concurrent_downloads": "999",
+                "startup_behavior": "surprise",
+                "theme": None,
+            }
+        )
+    )
+
+    loaded = AppSettings.load(path)
+
+    assert loaded.output_dir == AppSettings.default_output_dir()
+    assert loaded.format_selector == "bv*+ba/b"
+    assert loaded.use_proxy is False
+    assert loaded.proxy_url is None
+    assert loaded.cookie_browser is None
+    assert loaded.concurrent_downloads == 8
+    assert loaded.startup_behavior == "normal"
+    assert loaded.theme == "dark"
+
+
+@pytest.mark.parametrize(("raw", "expected"), [("bad", 2), (0, 1), (-3, 1), ("4", 4)])
+def test_settings_concurrency_coercion_is_startup_safe(tmp_path, raw, expected):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"version": AppSettings.VERSION, "concurrent_downloads": raw}))
+
+    assert AppSettings.load(path).concurrent_downloads == expected
+
+
 def test_queue_ids_retry_and_sanitized_snapshot(tmp_path):
     request = DownloadRequest("https://example.test", tmp_path, proxy_url="http://secret", cookie_browser="chrome")
     queue = DownloadQueue()

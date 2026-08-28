@@ -11,6 +11,7 @@ from desktop_app.main_window import WorkerBridge
 from desktop_app.models import DownloadEvent
 from desktop_app.models import DownloadResult
 from desktop_app.settings import AppSettings
+from desktop_app.errors import ERROR_GUIDANCE
 
 
 class IdleService:
@@ -91,19 +92,53 @@ def test_invalid_settings_show_inline_error_and_do_not_save(qtbot, tmp_path):
     assert dialog.error_label.text()
 
 
-def test_settings_save_oserror_keeps_dialog_open_with_inline_error(qtbot, tmp_path, monkeypatch):
+def test_settings_save_oserror_keeps_dialog_open_and_live_settings_unchanged(qtbot, tmp_path, monkeypatch):
     window = _window(qtbot, tmp_path)
     dialog = window._create_settings_dialog(); qtbot.addWidget(dialog); dialog.show()
-    monkeypatch.setattr(window.settings, "save", lambda: (_ for _ in ()).throw(OSError("disk full")))
+    original = {
+        "output_dir": window.settings.output_dir,
+        "use_proxy": window.settings.use_proxy,
+        "proxy_url": window.settings.proxy_url,
+        "cookie_browser": window.settings.cookie_browser,
+        "concurrent_downloads": window.settings.concurrent_downloads,
+        "theme": window.settings.theme,
+    }
+    monkeypatch.setattr(
+        AppSettings,
+        "save",
+        lambda self, path=None: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    dialog.output_dir_edit.setText(str(tmp_path / "candidate"))
+    dialog.proxy_enabled_checkbox.setChecked(True)
+    dialog.proxy_url_edit.setText("http://user:secret@proxy.example")
+    dialog.cookie_browser_combo.setCurrentText("Firefox")
+    dialog.concurrent_downloads_spin.setValue(6)
+    dialog.theme_combo.setCurrentText("Light")
     dialog.accept()
     assert dialog.isVisible()
     assert "disk full" in dialog.error_label.text()
-    assert window.settings.output_dir == tmp_path
-    dialog.output_dir_edit.setText(str(tmp_path / "valid"))
-    dialog.proxy_enabled_checkbox.setChecked(True)
-    dialog.proxy_url_edit.setText("not a proxy")
+    for name, value in original.items():
+        assert getattr(window.settings, name) == value
+
+
+def test_instance_save_failure_hook_is_honored_without_live_mutation(qtbot, tmp_path, monkeypatch):
+    """Catch candidate persistence bypassing existing injected save hooks."""
+    window = _window(qtbot, tmp_path)
+    dialog = window._create_settings_dialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    original = window.settings.output_dir
+    monkeypatch.setattr(
+        window.settings,
+        "save",
+        lambda: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    dialog.output_dir_edit.setText(str(tmp_path / "candidate"))
+
     dialog.accept()
-    assert dialog.error_label.text()
+
+    assert dialog.isVisible()
+    assert window.settings.output_dir == original
 
 
 def test_card_controls_fit_at_minimum_size(qtbot, tmp_path):
@@ -155,3 +190,33 @@ def test_light_theme_switch_updates_application_style(qtbot, tmp_path):
     window.apply_theme("light")
     assert window.settings.theme == "light"
     assert "#F7F9FC" in window.styleSheet()
+
+
+@pytest.mark.parametrize(
+    "error_code",
+    [
+        "invalid_url",
+        "format_unavailable",
+        "auth_required",
+        "network_error",
+        "proxy_error",
+        "ffmpeg_missing",
+        "unsupported_site",
+        "download_failed",
+        "cancelled",
+    ],
+)
+def test_failed_cards_show_actionable_guidance_and_activity_keeps_detail(
+    qtbot, tmp_path, error_code
+):
+    """Catch structured error codes that still render only a generic Failed badge."""
+    window = _window(qtbot, tmp_path)
+    window.add_urls("https://example.test/video")
+    item_id = window.queue.snapshot()[0]["id"]
+    window.queue.update_status(item_id, "running")
+
+    window._mark_failed(item_id, "technical upstream detail", error_code)
+
+    card = window.queue_list.card_at(0)
+    assert card.detail_label.text() == ERROR_GUIDANCE[error_code]
+    assert "technical upstream detail" in window.activity_log.toPlainText()

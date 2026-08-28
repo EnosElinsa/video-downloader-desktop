@@ -1,7 +1,9 @@
 from pathlib import Path
 
 import pytest
+import yt_dlp
 
+from desktop_app.download_core import DownloadService
 from desktop_app.models import DownloadEvent, DownloadResult
 from desktop_app.settings import AppSettings
 
@@ -9,7 +11,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QApplication
 
-from desktop_app.main_window import MainWindow, WorkerSignals
+from desktop_app.main_window import DownloadWorker, MainWindow, WorkerSignals
 
 
 class FakeService:
@@ -43,6 +45,24 @@ def test_multiline_paste_creates_one_row_per_url(qtbot, tmp_path):
 
     assert window.queue_table.rowCount() == 2
     assert len(window.queue.snapshot()) == 2
+
+
+def test_add_urls_normalizes_markdown_and_rejects_invalid_lines_with_feedback(qtbot, tmp_path):
+    """Catch malformed input entering the queue or Markdown leaking into cards."""
+    window = _window(qtbot, tmp_path)
+
+    window.add_urls(
+        "[Demo](HTTPS://Example.Test/video?a=1\\&b=2)\n"
+        "ftp://example.test/file\n"
+        "not a url"
+    )
+
+    snapshot = window.queue.snapshot()
+    assert len(snapshot) == 1
+    assert snapshot[0]["url"] == "https://example.test/video?a=1&b=2"
+    assert "example.test" in window.queue_list.card_at(0).meta_label.text()
+    assert "invalid" in window.activity_log.toPlainText().lower()
+    assert "http(s)" in window.activity_log.toPlainText().lower()
 
 
 def test_start_item_marks_running_and_worker_updates_progress(qtbot, tmp_path):
@@ -278,3 +298,63 @@ def test_worker_signal_api_has_no_public_raw_emit_bypass():
     assert not hasattr(signals, "failed")
     assert callable(signals.connect_event)
     assert callable(signals.connect_finished)
+
+
+def test_gui_worker_succeeds_after_ytdlp_failure_via_shared_fallback(qtbot, tmp_path):
+    """Catch the desktop app bypassing the service-owned HTML fallback."""
+    class UnsupportedBackend:
+        def build_options(self, request, format_selector, progress_hook, logger):
+            return {"format": format_selector, "progress_hooks": [progress_hook]}
+
+        def extract_info(self, url, options):
+            raise yt_dlp.utils.DownloadError("Unsupported URL: no suitable extractor")
+
+        def download(self, url, options):
+            raise AssertionError("download must not run after failed extraction")
+
+    class EmbeddedFallback:
+        def attempt(self, request, emit, cancel, download_manifest):
+            filename = str(tmp_path / "embedded.mp4")
+            emit(DownloadEvent("finished", filename=filename))
+            return DownloadResult(True, filename, "Embedded", None, None)
+
+    service = DownloadService(UnsupportedBackend(), fallback=EmbeddedFallback())
+    window = _window(qtbot, tmp_path, service)
+    window.add_urls("https://example.test/watch")
+    item_id = window.queue.snapshot()[0]["id"]
+
+    window.start_item(item_id)
+    qtbot.waitUntil(lambda: window.queue.snapshot()[0]["status"] == "success")
+
+    assert window.queue.snapshot()[0]["filename"] == str(tmp_path / "embedded.mp4")
+
+
+def test_worker_unexpected_exception_is_sanitized_before_failed_signal(tmp_path):
+    """Catch raw worker exceptions bypassing service event sanitization."""
+    class CrashingService:
+        def download(self, request, emit, cancel=None):
+            raise RuntimeError(
+                "alice p%40ssword http://alice:p%40ssword@proxy.example "
+                "token=worker-token"
+            )
+
+    from desktop_app.models import DownloadRequest
+
+    worker = DownloadWorker(
+        CrashingService(),
+        DownloadRequest(
+            "https://example.test/video",
+            tmp_path,
+            use_proxy=True,
+            proxy_url="http://alice:p%40ssword@proxy.example",
+        ),
+    )
+    failures = []
+    worker.signals.connect_failed(failures.append)
+
+    worker.run()
+
+    assert len(failures) == 1
+    for secret in ("alice", "p%40ssword", "worker-token"):
+        assert secret not in failures[0]
+    assert "http://proxy.example" in failures[0]

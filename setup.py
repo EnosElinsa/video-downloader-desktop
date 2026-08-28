@@ -3,6 +3,7 @@ import sys
 import subprocess
 import shutil
 from setuptools import setup, find_packages
+from desktop_app.security import sanitize_message
 
 # Check if pip is available and install dependencies
 def install_dependencies():
@@ -16,26 +17,10 @@ def install_dependencies():
         ])
         print("Dependencies installed successfully.")
         
-        # If tkinter is not available, inform the user
-        try:
-            import tkinter
-        except ImportError:
-            print("\nWARNING: tkinter is not installed. The GUI version will not work.")
-            print("To install tkinter:")
-            if sys.platform.startswith('win'):
-                print("1. Download and install Python with tkinter from python.org")
-            elif sys.platform.startswith('linux'):
-                print("1. Use your package manager to install tkinter")
-                print("   For Ubuntu/Debian: sudo apt-get install python3-tk")
-                print("   For Fedora: sudo dnf install python3-tkinter")
-                print("   For Arch: sudo pacman -S tk")
-            elif sys.platform.startswith('darwin'):
-                print("1. Install tkinter via Homebrew: brew install python-tk")
-            
         return True
         
     except Exception as e:
-        print(f"Error installing dependencies: {e}")
+        print(f"Error installing dependencies: {sanitize_message(e)}")
         return False
 
 # Create desktop shortcut (Windows only)
@@ -59,18 +44,19 @@ def create_desktop_shortcut():
             return True
             
         except Exception as e:
-            print(f"Error creating desktop shortcuts: {e}")
+            print(f"Error creating desktop shortcuts: {sanitize_message(e)}")
     
     return False
 
 # Main setup
 if __name__ == "__main__":
-    # Check if this is being run as a script or as a setup.py install
-    if len(sys.argv) > 1 and sys.argv[1] == "install":
-        # This is a regular setup.py install
+    # Standard setuptools commands (including ``--version``) must be
+    # side-effect free; the dependency/bootstrap prompt is only for a
+    # deliberate no-argument legacy invocation.
+    if len(sys.argv) > 1:
         setup(
             name="video_downloader",
-            version="1.0.0",
+            version="0.1.0",
             description="Universal Video Downloader",
             author="Video Downloader Team",
             packages=find_packages(),
@@ -106,6 +92,6 @@ if __name__ == "__main__":
         print("\nSetup completed!")
         print("\nTo use the downloader:")
         print("1. Command line: python universal_video_downloader.py")
-        print("2. GUI version: python video_downloader_gui.py")
+        print("2. GUI version: python -m desktop_app")
         
         input("\nPress Enter to exit...") 

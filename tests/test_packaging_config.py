@@ -37,6 +37,30 @@ def test_spec_collects_runtime_dependencies_and_qt_platform_plugins():
     assert '"ffmpeg.exe"' in spec
 
 
+def test_spec_bundles_runtime_icon_and_resource_helper():
+    """Catch a frozen app whose redesigned header icon exists only in source."""
+    spec = (ROOT / "packaging" / "video_downloader.spec").read_text(encoding="utf-8")
+    assert '"assets/video-downloader.ico"' in spec or "video-downloader.ico" in spec
+    assert "resource_path(" in (ROOT / "desktop_app" / "main_window.py").read_text(encoding="utf-8")
+
+
+def test_release_build_does_not_accept_an_unverified_path_ffmpeg():
+    """Catch mutable PATH state bypassing the pinned FFmpeg distribution."""
+    script = (ROOT / "packaging" / "build_windows.ps1").read_text(encoding="utf-8")
+    assert "Get-Command ffmpeg.exe" not in script
+    assert "pinnedSha256" in script
+    assert "Get-FileHash" in script
+    assert "RequestedPath" in script
+    assert "allowlisted" in script.lower() or "sha256" in script.lower()
+
+
+def test_release_build_runs_gui_launch_probe_for_both_artifacts():
+    """Catch a workflow that proves only the early-exit version flag."""
+    script = (ROOT / "packaging" / "build_windows.ps1").read_text(encoding="utf-8")
+    assert "gui_probe.py" in script
+    assert script.count("gui_probe.py") >= 2
+
+
 def test_build_script_has_stable_artifact_names_and_release_gates():
     """Catch output-name drift or bypassing tests and checksum generation."""
     script = (ROOT / "packaging" / "build_windows.ps1").read_text(encoding="utf-8")

@@ -57,11 +57,18 @@ def main(argv: list[str] | None = None) -> int:
         _write_version(f"Video Downloader {APP_VERSION}")
         return 0
 
+    gui_probe = "--gui-probe" in args
+    if gui_probe:
+        args = [arg for arg in args if arg != "--gui-probe"]
+
     qt_argv = sys.argv if argv is None else [sys.argv[0], *args]
     app = QApplication.instance() or QApplication(qt_argv)
     settings = AppSettings.load()
     window = MainWindow(settings, DownloadService())
     show_window(window, settings.startup_behavior)
+    if gui_probe:
+        app.processEvents()
+        return 0 if not window.grab().isNull() else 1
     return app.exec()
 
 

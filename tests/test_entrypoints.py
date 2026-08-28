@@ -71,6 +71,28 @@ def test_readme_uses_the_desktop_module_command():
     assert "python -m desktop_app" in readme
 
 
+def test_release_metadata_agrees_on_v010_and_does_not_claim_tkinter_or_unlicensed_use():
+    """Catch stale installer guidance and unsupported public license claims."""
+    root = Path(__file__).parents[1]
+    readme = (root / "README.md").read_text(encoding="utf-8").lower()
+    setup = (root / "setup.py").read_text(encoding="utf-8").lower()
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8").lower()
+
+    assert 'version="0.1.0"' in setup
+    assert 'version = "0.1.0"' in pyproject
+    assert "tkinter" not in setup
+    assert "always uses the automatic" not in readme
+    assert "open-source and free" not in readme
+    assert "best single file" in readme
+
+
+def test_release_hygiene_ignores_internal_reports_and_local_inputs():
+    """Catch internal review artifacts or user source material entering a release."""
+    ignore = (Path(__file__).parents[1] / ".gitignore").read_text(encoding="utf-8")
+    for entry in (".superpowers/sdd/", ".tools/", ".test-tmp/", ".temp-green/", ".full-temp/", ".red-temp/", ".stale-build-acl/", "source.md", "build/", "dist/"):
+        assert entry in ignore
+
+
 def test_installed_gui_entry_point_declares_pyside6_runtime_dependency():
     """Catch either documented installer creating a GUI script without Qt."""
     import ast
