@@ -48,6 +48,29 @@ class _DownloadCancelled(Exception):
     pass
 
 
+class _YtdlpEventLogger:
+    """Adapt yt-dlp diagnostics to the service's typed event boundary."""
+
+    def __init__(self, emit, sanitize):
+        self._emit = emit
+        self._sanitize = sanitize
+
+    def debug(self, message):
+        self._log(message)
+
+    def info(self, message):
+        self._log(message)
+
+    def warning(self, message):
+        self._log(message)
+
+    def error(self, message):
+        self._log(message)
+
+    def _log(self, message):
+        self._emit(DownloadEvent("log", message=self._sanitize(message)))
+
+
 class DownloadService:
     def __init__(self, backend: YtdlpBackend | None = None, logger: logging.Logger | None = None):
         self.backend = backend or _DefaultYtdlpBackend()
@@ -91,6 +114,7 @@ class DownloadService:
 
                 try:
                     options = self._build_options(request, selector, progress_hook)
+                    options["logger"] = _YtdlpEventLogger(emit, self._safe_message)
                     info = self._extract_info(source_url, options)
                     if not info:
                         raise RuntimeError("No video information was returned.")
@@ -170,4 +194,11 @@ class DownloadService:
         if error is None:
             return "Download failed"
         message = re.sub(r"\x1b\[[0-9;]*m", "", str(error))
-        return re.sub(r"(?i)(cookie|token|password|secret)\s*[=:]\s*\S+", r"\1=<redacted>", message)
+        sensitive_assignment = re.compile(
+            r"""(?ix)
+            \b(cookie(?:s)?|session(?:id)?|token|authorization|password|secret)
+            \s*[:=]\s*
+            ("[^"]*"|'[^']*'|[^;,\s]+)
+            """
+        )
+        return sensitive_assignment.sub(lambda match: f"{match.group(1)}=<redacted>", message)

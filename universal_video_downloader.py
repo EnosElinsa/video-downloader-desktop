@@ -511,7 +511,9 @@ def try_fallback_methods(url, output_dir='.', use_proxy=False, proxy_url=None,
             # Try to get the page and extract video links
             response = requests.get(url, **request_kwargs)
             content_type = response.headers.get('content-type', '').lower()
-            if response.status_code == 200 and not content_type.startswith('text/html'):
+            # Some servers omit Content-Type for otherwise ordinary HTML pages;
+            # keep that legacy-compatible case parseable as HTML.
+            if response.status_code == 200 and (not content_type or content_type.startswith('text/html')):
                 html_content = response.text
 
                 video_urls = extract_video_urls_from_html(html_content, url)
@@ -527,7 +529,9 @@ def try_fallback_methods(url, output_dir='.', use_proxy=False, proxy_url=None,
                 else:
                     logger.error("Could not find any video links on the page.")
             elif response.status_code == 200:
-                logger.error('The direct URL returned an HTML page instead of a video file.')
+                logger.error(
+                    'The URL returned unexpected non-HTML content; no embedded media links can be extracted.'
+                )
             else:
                 logger.error(f"HTTP error: {response.status_code}")
     
@@ -567,6 +571,17 @@ def download_video(url, output_dir='.', use_proxy=False, proxy_url=None,
                 cookie_browser, output_template
             ):
                 return DownloadResult(True, None, None, None, None)
+
+    # The CLI's optional interactive format picker needs yt-dlp's format list,
+    # so retain the established legacy path only when the user requested it.
+    # Normal GUI/programmatic downloads continue through the typed service.
+    if select_format:
+        selected_success = download_with_ytdlp(
+            normalized_url, output_dir, use_proxy, proxy_url, True,
+            cookie_browser, output_template,
+        )
+        if selected_success:
+            return DownloadResult(True, None, None, None, None)
 
     request = DownloadRequest(
         normalized_url, Path(output_dir),

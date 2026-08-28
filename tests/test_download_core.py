@@ -81,3 +81,40 @@ def test_service_classifies_authentication_without_cookie_values(tmp_path):
     assert result.error_code == "auth_required"
     assert events[-1].kind == "failed"
     assert "chrome" not in (result.error_message or "")
+
+
+def test_service_redacts_cookie_values_from_authentication_events_and_results(tmp_path):
+    class SecretBackend(FakeBackend):
+        def extract_info(self, url, options):
+            raise yt_dlp.utils.DownloadError(
+                'authentication failed: cookies=SESSION_VALUE; '
+                'Cookie: session=abc; token=xyz; cookie="quoted-secret"'
+            )
+
+    events = []
+    result = DownloadService(SecretBackend()).download(
+        DownloadRequest("https://example.test/v", tmp_path), events.append
+    )
+
+    exposed = " ".join(event.message for event in events) + " " + (result.error_message or "")
+    for secret in ("SESSION_VALUE", "abc", "xyz", "quoted-secret"):
+        assert secret not in exposed
+
+
+def test_service_converts_sanitized_ytdlp_diagnostics_to_log_events(tmp_path):
+    class LoggingBackend(FakeBackend):
+        def extract_info(self, url, options):
+            options["logger"].warning("upstream warning Cookie: session=abc; token=xyz")
+            return super().extract_info(url, options)
+
+    events = []
+    result = DownloadService(LoggingBackend()).download(
+        DownloadRequest("https://example.test/v", tmp_path), events.append
+    )
+
+    assert result.success is True
+    log_events = [event for event in events if event.kind == "log"]
+    assert len(log_events) == 1
+    assert "upstream warning" in log_events[0].message
+    assert "abc" not in log_events[0].message
+    assert "xyz" not in log_events[0].message
