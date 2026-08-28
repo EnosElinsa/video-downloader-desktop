@@ -1,0 +1,4 @@
+# Test and development dependencies.
+-r requirements-desktop.txt
+pytest==8.3.5
+pytest-qt==4.4.0

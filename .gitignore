@@ -1,0 +1,48 @@
+# Python environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build and release output
+build/
+dist/
+*.spec.bak
+*.egg-info/
+
+# Downloaded media and temporary artifacts
+videos/
+downloads/
+*.part
+*.ytdl
+*.tmp
+
+# Local application data and secrets
+.video_downloader_config.json
+settings.json
+cookies.txt
+*.cookies
+*.cookie
+*.log
+logs/
+
+# Editors and operating-system files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local environment files
+.env
+.env.*
+!.env.example

@@ -1,0 +1,4 @@
+# Runtime dependencies for the PySide6 Windows desktop application.
+-r requirements.txt
+PySide6==6.8.2.1
+PyInstaller==6.14.2
