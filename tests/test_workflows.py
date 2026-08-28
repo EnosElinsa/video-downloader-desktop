@@ -131,6 +131,8 @@ def test_release_is_tagged_windows_release_with_write_permission_and_artifacts()
     release_step = next(
         step for step in _steps(workflow) if step.get("uses", "").startswith("softprops/action-gh-release@")
     )
+    assert release_step["uses"] == "softprops/action-gh-release@v3"
+    assert str(release_step["with"]["fail_on_unmatched_files"]).lower() == "true"
     files = release_step["with"]["files"]
     for artifact in (
         "dist/VideoDownloader-windows-x64.zip",
@@ -138,3 +140,14 @@ def test_release_is_tagged_windows_release_with_write_permission_and_artifacts()
         "dist/SHA256SUMS.txt",
     ):
         assert artifact in files
+
+    build_script = (ROOT / "packaging" / "build_windows.ps1").read_text(encoding="utf-8")
+    for artifact_name in (
+        "VideoDownloader-windows-x64.zip",
+        "VideoDownloader-windows-x64.exe",
+        "SHA256SUMS.txt",
+    ):
+        assert artifact_name in build_script
+
+    build_step = next(step for step in _steps(workflow) if "build_windows.ps1" in step.get("run", ""))
+    assert build_step["env"]["QT_QPA_PLATFORM"] == "offscreen"

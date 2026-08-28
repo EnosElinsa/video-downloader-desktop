@@ -33,3 +33,15 @@
   runner with the offscreen platform setting.
 - The initial Windows artifacts are intentionally unsigned, so SmartScreen
   warnings are expected and called out in release notes and README guidance.
+
+## Round 1 Review Fixes
+
+- Release publication now uses `softprops/action-gh-release@v3` and sets
+  `fail_on_unmatched_files: true`, preventing an incomplete release when any
+  required artifact is missing.
+- Workflow contract tests assert the supported release-action major, the
+  unmatched-file failure gate, all artifact names in the build script, and the
+  offscreen environment on the build step.
+- The release build step exports `QT_QPA_PLATFORM=offscreen`, so the
+  build script's duplicate pytest gate runs under the same headless Qt
+  configuration as the explicit workflow test step.
