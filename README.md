@@ -67,6 +67,33 @@ outside the installation directory. Initial unsigned builds may show a
 Microsoft SmartScreen warning; verify the release checksum before choosing
 **More info** and **Run anyway**.
 
+#### Building and publishing a release
+
+Push a semantic-version tag (for example, `v0.1.0`) to run the Windows release
+workflow. It installs Python 3.11 and the desktop/development requirements,
+runs the offscreen test suite, compiles the desktop package, executes the
+packaged `--version` smoke test, and attaches these files to the GitHub
+Release:
+
+```
+VideoDownloader-windows-x64.zip
+VideoDownloader-windows-x64.exe
+SHA256SUMS.txt
+```
+
+Repository maintainers can also start the workflow with **Run workflow** and
+provide a semantic version. To build locally on Windows, use PowerShell:
+
+```
+python -m pip install -r requirements-desktop.txt
+python -m pip install -r requirements-dev.txt
+./packaging/build_windows.ps1 -Version 0.1.0
+```
+
+The initial Windows 10/11 artifacts are unsigned, so SmartScreen may warn
+users on first launch. Verify `SHA256SUMS.txt` against the downloaded ZIP or
+EXE before running it.
+
 ### Command Line Interface
 
 ```
