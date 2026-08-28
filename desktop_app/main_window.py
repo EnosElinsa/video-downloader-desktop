@@ -194,6 +194,7 @@ class MainWindow(QMainWindow):
         self.thread_pool.setMaxThreadCount(max(1, int(getattr(settings, "concurrent_downloads", 2))))
         self._workers = {}
         self._bridges = {}
+        self._pending_retries = {}
         self._row_for_item = {}
         self.setWindowTitle("Video Downloader")
         self.setMinimumSize(900, 620)
@@ -233,7 +234,11 @@ class MainWindow(QMainWindow):
         self.output_dir_edit.editingFinished.connect(self._persist_output_dir)
         browse = QPushButton("Browse"); browse.clicked.connect(self._choose_output_dir); form.addWidget(browse, 2, 2)
         form.addWidget(QLabel("Format"), 3, 0)
-        self.format_combo = QComboBox(); self.format_combo.addItem("Automatic (best video + audio)", "bv*+ba/b"); self.format_combo.addItem("Best single file", "best"); form.addWidget(self.format_combo, 3, 1)
+        self.format_combo = QComboBox(); self.format_combo.addItem("Automatic (best video + audio)", "bv*+ba/b"); self.format_combo.addItem("Best single file", "best")
+        format_index = self.format_combo.findData(self.settings.format_selector)
+        if format_index >= 0:
+            self.format_combo.setCurrentIndex(format_index)
+        form.addWidget(self.format_combo, 3, 1)
         self.add_button = QPushButton("Add URL"); self.add_button.setObjectName("primaryButton"); self.add_button.clicked.connect(lambda: self.add_urls(self.url_input.toPlainText())); form.addWidget(self.add_button, 3, 2)
         layout.addWidget(composer)
 
@@ -320,15 +325,28 @@ class MainWindow(QMainWindow):
     def retry_item(self, item_id):
         try: self.queue.retry(item_id)
         except ValueError: return
-        # Invalidate callbacks from a cancelled/failed previous run before
-        # exposing the item as queued again. A subsequent start gets a new
-        # bridge and cannot be affected by late signals from the old worker.
-        self._workers.pop(item_id, None)
-        self._bridges.pop(item_id, None)
+        previous_request = self.queue.get(item_id).request
+        request = DownloadRequest(
+            url=previous_request.url,
+            output_dir=Path(self.settings.output_dir),
+            format_selector=self.settings.format_selector,
+            use_proxy=self.settings.use_proxy,
+            proxy_url=self.settings.proxy_url,
+            cookie_browser=self.settings.cookie_browser,
+            output_template=previous_request.output_template,
+        )
+        self.queue.replace_request(item_id, request)
         self._set_status(item_id, "queued"); row = self._row_for_item.get(item_id)
         if row is not None:
             self.queue_table.cellWidget(row, self.PROGRESS_COLUMN).set_value(0)
             self.queue_table.item(row, 0).setText(self.queue.snapshot()[row]["url"])
+        if item_id in self._workers:
+            # Cancellation is cooperative; retain the bridge and defer the
+            # new worker until the previous worker has actually returned.
+            self._pending_retries[item_id] = request
+            self._set_status(item_id, "cancelling")
+            self._log("Waiting for cancelled download to stop before retrying")
+            return
         self.start_item(item_id)
 
     @Slot(str)
@@ -350,6 +368,8 @@ class MainWindow(QMainWindow):
         sender = self.sender()
         if sender is not None and sender is not self._bridges.get(item_id):
             return
+        if item_id in self._pending_retries:
+            return
         current = next((i for i in self.queue.snapshot() if i["id"] == item_id), None)
         if current is None or current["status"] == "cancelled":
             return
@@ -368,6 +388,8 @@ class MainWindow(QMainWindow):
             return
         self._workers.pop(item_id, None)
         self._bridges.pop(item_id, None)
+        if self._start_pending_retry(item_id):
+            return
         current = next((i for i in self.queue.snapshot() if i["id"] == item_id), None)
         if current is None or current["status"] == "cancelled":
             return
@@ -382,7 +404,15 @@ class MainWindow(QMainWindow):
             return
         self._workers.pop(item_id, None)
         self._bridges.pop(item_id, None)
+        if self._start_pending_retry(item_id):
+            return
         self._mark_failed(item_id, error, "download_failed")
+    def _start_pending_retry(self, item_id):
+        if self._pending_retries.pop(item_id, None) is None:
+            return False
+        self._set_status(item_id, "queued")
+        self.start_item(item_id)
+        return True
     def _mark_failed(self, item_id, message, code):
         try: self.queue.update_status(item_id, "failed", error=message, error_code=code)
         except ValueError: return

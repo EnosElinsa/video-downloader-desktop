@@ -87,3 +87,17 @@ def test_queue_get_exposes_item_without_private_storage_access(tmp_path):
     assert item.request is request
     with pytest.raises(KeyError, match="unknown queue item"):
         queue.get("missing")
+
+
+def test_queue_replaces_a_queued_request_before_retry(tmp_path):
+    queue = DownloadQueue()
+    item_id = queue.add(DownloadRequest("https://example.test", tmp_path))
+    replacement = DownloadRequest(
+        "https://example.test", tmp_path / "new-output", use_proxy=True,
+        proxy_url="socks5://127.0.0.1:1080", cookie_browser="firefox",
+        format_selector="best",
+    )
+
+    queue.replace_request(item_id, replacement)
+
+    assert queue.get(item_id).request == replacement

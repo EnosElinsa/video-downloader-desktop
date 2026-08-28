@@ -77,9 +77,11 @@ def test_retry_failed_item_starts_a_fresh_download(qtbot, tmp_path):
     class RetryService:
         def __init__(self):
             self.calls = 0
+            self.requests = []
 
         def download(self, request, emit, cancel=None):
             self.calls += 1
+            self.requests.append(request)
             if self.calls == 1:
                 emit(DownloadEvent("failed", message="network down", error_code="download_failed"))
                 return DownloadResult(False, None, None, "download_failed", "network down")
@@ -92,10 +94,21 @@ def test_retry_failed_item_starts_a_fresh_download(qtbot, tmp_path):
     window.start_item(item_id)
     qtbot.waitUntil(lambda: window.queue.snapshot()[0]["status"] == "failed")
 
+    window.settings.output_dir = tmp_path / "new-output"
+    window.settings.use_proxy = True
+    window.settings.proxy_url = "socks5://127.0.0.1:1080"
+    window.settings.cookie_browser = "firefox"
+    window.settings.format_selector = "best"
+
     window.retry_item(item_id)
 
     qtbot.waitUntil(lambda: window.queue.snapshot()[0]["status"] == "success")
     assert service.calls == 2
+    assert service.requests[1].output_dir == tmp_path / "new-output"
+    assert service.requests[1].use_proxy is True
+    assert service.requests[1].proxy_url == "socks5://127.0.0.1:1080"
+    assert service.requests[1].cookie_browser == "firefox"
+    assert service.requests[1].format_selector == "best"
 
 
 def test_settings_dialog_saves_download_preferences_and_updates_window(qtbot, tmp_path, monkeypatch):
@@ -164,25 +177,30 @@ def test_worker_events_are_delivered_on_gui_thread(qtbot, tmp_path):
     assert all(thread == QApplication.instance().thread() for thread in received_threads)
 
 
-def test_cancel_retry_discards_late_events_from_old_worker(qtbot, tmp_path):
+def test_cancel_retry_waits_for_old_worker_before_starting_replacement(qtbot, tmp_path):
     import threading
 
     class RaceService:
         def __init__(self):
             self.started = threading.Event()
+            self.release_old_worker = threading.Event()
             self.calls = 0
+            self.active_calls = 0
+            self.max_active_calls = 0
 
         def download(self, request, emit, cancel=None):
             self.calls += 1
-            if self.calls == 1:
-                self.started.set()
-                while not cancel.is_set():
-                    self.started.wait(0.005)
-                # This event belongs to the cancelled run and must be ignored.
-                emit(DownloadEvent("progress", percent=99))
-                return DownloadResult(False, None, None, "cancelled", "cancelled")
-            emit(DownloadEvent("progress", percent=10))
-            return DownloadResult(True, "new.mp4", "new", None, None)
+            self.active_calls += 1
+            self.max_active_calls = max(self.max_active_calls, self.active_calls)
+            try:
+                if self.calls == 1:
+                    self.started.set()
+                    self.release_old_worker.wait()
+                    return DownloadResult(False, None, None, "cancelled", "cancelled")
+                emit(DownloadEvent("progress", percent=10))
+                return DownloadResult(True, "new.mp4", "new", None, None)
+            finally:
+                self.active_calls -= 1
 
     service = RaceService()
     window = _window(qtbot, tmp_path, service)
@@ -192,9 +210,16 @@ def test_cancel_retry_discards_late_events_from_old_worker(qtbot, tmp_path):
     qtbot.waitUntil(service.started.is_set)
     window.cancel_item(item_id)
     window.retry_item(item_id)
-    window.start_item(item_id)
+
+    qtbot.wait(100)
+    assert service.calls == 1
+    assert service.max_active_calls == 1
+
+    service.release_old_worker.set()
     qtbot.waitUntil(lambda: window.queue.snapshot()[0]["status"] == "success")
 
+    assert service.calls == 2
+    assert service.max_active_calls == 1
     assert window.queue_table.cellWidget(0, window.PROGRESS_COLUMN).value() == 10
 
 

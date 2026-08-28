@@ -72,13 +72,31 @@ def test_readme_uses_the_desktop_module_command():
 
 
 def test_installed_gui_entry_point_declares_pyside6_runtime_dependency():
-    """Catch a clean install that creates a GUI script without its Qt binding."""
+    """Catch either documented installer creating a GUI script without Qt."""
+    import ast
     import tomllib
 
-    metadata = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+    root = Path(__file__).parents[1]
+    metadata = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+
+    setup_tree = ast.parse((root / "setup.py").read_text(encoding="utf-8"))
+    setup_call = next(
+        node for node in ast.walk(setup_tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "setup"
+    )
+    setup_keywords = {keyword.arg: keyword.value for keyword in setup_call.keywords}
+    setup_dependencies = [item.value for item in setup_keywords["install_requires"].elts]
+    entry_points = setup_keywords["entry_points"]
+    console_scripts = next(
+        value for key, value in zip(entry_points.keys, entry_points.values)
+        if key.value == "console_scripts"
+    )
+    setup_scripts = [item.value for item in console_scripts.elts]
 
     assert any(dependency.lower().startswith("pyside6") for dependency in metadata["project"]["dependencies"])
     assert metadata["project"]["scripts"]["video-downloader-gui"] == "desktop_app.main:main"
+    assert any(dependency.lower().startswith("pyside6") for dependency in setup_dependencies)
+    assert "video-downloader-gui=desktop_app.main:main" in setup_scripts
 
 
 def test_startup_behavior_opens_the_window_minimized_when_selected():

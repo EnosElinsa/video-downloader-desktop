@@ -92,6 +92,16 @@ class DownloadQueue:
             item.title = item.percent = item.speed = item.eta = item.filename = None
             item.error = item.error_code = None
 
+    def replace_request(self, item_id: str, request: DownloadRequest) -> None:
+        """Replace a queued request before its next worker starts."""
+        if not isinstance(request, DownloadRequest):
+            raise TypeError("request must be a DownloadRequest")
+        with self._lock:
+            item = self._item(item_id)
+            if item.status != "queued":
+                raise ValueError(f"cannot replace request for {item.status} item")
+            item.request = request
+
     def remove(self, item_id: str) -> None:
         with self._lock:
             self._item(item_id)

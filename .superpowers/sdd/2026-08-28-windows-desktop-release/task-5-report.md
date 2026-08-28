@@ -54,3 +54,24 @@ python -m pytest tests/test_entrypoints.py tests/test_main_window.py -q
 python -m pytest -q
 # 44 passed
 ```
+
+## Re-review fix round 2
+
+- Retry now replaces the queued `DownloadRequest` with current output,
+  format, proxy, and browser-cookie settings before the next worker begins.
+- A cancel followed by retry retains the old worker bridge and marks the retry
+  pending; the replacement worker starts only from the old worker completion
+  callback. This prevents two active downloader calls for one queue item.
+- The retained `setup.py` install path now declares PySide6 and targets
+  `desktop_app.main:main`, matching `pyproject.toml`.
+
+### Re-review verification
+
+With Qt offscreen, a workspace-local `TEMP`/`TMP`, and pytest cache disabled:
+
+```powershell
+python -m pytest tests/test_entrypoints.py tests/test_settings_queue.py tests/test_main_window.py -q
+# 27 passed
+python -m pytest -q
+# 45 passed
+```
