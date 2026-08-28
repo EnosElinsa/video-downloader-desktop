@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import re
-from pathlib import Path
 from typing import Callable, Protocol, Any
 
 from .models import DownloadEvent, DownloadRequest, DownloadResult
@@ -92,7 +91,7 @@ class DownloadService:
 
                 try:
                     options = self._build_options(request, selector, progress_hook)
-                    info = self.backend.extract_info(source_url, options)
+                    info = self._extract_info(source_url, options)
                     if not info:
                         raise RuntimeError("No video information was returned.")
                     title = info.get("title") if isinstance(info, dict) else None
@@ -128,6 +127,15 @@ class DownloadService:
         except TypeError as error:
             try:
                 return self.backend.download([url], options)
+            except TypeError:
+                raise error
+
+    def _extract_info(self, url, options):
+        try:
+            return self.backend.extract_info(url, options)
+        except TypeError as error:
+            try:
+                return self.backend.extract_info(url, download=False, options=options)
             except TypeError:
                 raise error
 
