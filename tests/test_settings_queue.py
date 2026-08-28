@@ -22,6 +22,15 @@ def test_settings_defaults_and_migration(tmp_path, monkeypatch):
     assert AppSettings.load().cookie_browser is None
 
 
+def test_settings_future_schema_is_ignored_without_downgrade(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"version": AppSettings.VERSION + 1, "output_dir": "future"}))
+    loaded = AppSettings.load(path)
+    assert loaded.output_dir == AppSettings.default_output_dir()
+    loaded.save(path)
+    assert json.loads(path.read_text())["version"] == AppSettings.VERSION
+
+
 def test_settings_save_is_atomic_and_custom_path(tmp_path):
     path = tmp_path / "nested" / "settings.json"
     settings = AppSettings(output_dir=tmp_path / "downloads", cookie_browser="chrome")

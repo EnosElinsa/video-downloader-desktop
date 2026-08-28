@@ -50,10 +50,29 @@ class AppSettings:
                 raise ValueError("settings must be an object")
         except (OSError, ValueError, json.JSONDecodeError):
             return cls()
-        # Version 0 files had no version and may omit fields introduced later.
+        # Missing ``version`` is the original v0 schema.  Keep migrations
+        # named and explicit so a future payload is never silently downgraded.
+        try:
+            version = int(raw.get("version", 0))
+        except (TypeError, ValueError):
+            return cls()
+        if version > cls.VERSION or version < 0:
+            return cls()
         values = {f.name: raw[f.name] for f in fields(cls) if f.name in raw}
         values.pop("VERSION", None)
+        while version < cls.VERSION:
+            migration = getattr(cls, f"_migrate_v{version}_to_v{version + 1}", None)
+            if migration is None:
+                return cls()
+            values = migration(values)
+            version += 1
         return cls(**values)
+
+    @staticmethod
+    def _migrate_v0_to_v1(values: dict[str, Any]) -> dict[str, Any]:
+        # v0 had no cookie_browser (or any of the newer optional fields).
+        # Dataclass defaults supply those fields when absent.
+        return values
 
     def save(self, path: str | Path | None = None) -> Path:
         target = Path(path) if path is not None else self.app_dir() / "settings.json"
