@@ -89,6 +89,15 @@ def test_invalid_settings_show_inline_error_and_do_not_save(qtbot, tmp_path):
     dialog.output_dir_edit.setText("   ")
     dialog.accept()
     assert dialog.error_label.text()
+
+
+def test_settings_save_oserror_keeps_dialog_open_with_inline_error(qtbot, tmp_path, monkeypatch):
+    window = _window(qtbot, tmp_path)
+    dialog = window._create_settings_dialog(); qtbot.addWidget(dialog); dialog.show()
+    monkeypatch.setattr(window.settings, "save", lambda: (_ for _ in ()).throw(OSError("disk full")))
+    dialog.accept()
+    assert dialog.isVisible()
+    assert "disk full" in dialog.error_label.text()
     assert window.settings.output_dir == tmp_path
     dialog.output_dir_edit.setText(str(tmp_path / "valid"))
     dialog.proxy_enabled_checkbox.setChecked(True)

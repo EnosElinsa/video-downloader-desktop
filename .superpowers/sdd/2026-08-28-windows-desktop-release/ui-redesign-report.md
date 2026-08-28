@@ -30,5 +30,9 @@
 - Added explicit quality labels, Enter/Ctrl+Enter submission, standard play icon, stable accessibility names, settings validation, and minimum-size geometry coverage.
 - The render tool sets `QT_QPA_FONTDIR=C:\\Windows\\Fonts` for deterministic readable offscreen typography while production continues to request Segoe UI Variable/Segoe UI.
 
+## Round 2 fix
+- Settings Save now validates and persists before closing; failed writes keep the dialog open with an inline error. Regression coverage confirms an `OSError` remains visible to the user.
+- Code fix commit: pending final commit.
+
 ## Commit
 - `613c59afe8f812e9b36dde623d9b8c8d813b251f`

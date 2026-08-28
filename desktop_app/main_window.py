@@ -56,6 +56,7 @@ class DownloadWorker(QRunnable):
         except Exception as exc: self.signals.emit_failed(str(exc))
 
 class SettingsDialog(QDialog):
+    save_requested = Signal()
     def __init__(self,settings,parent=None):
         super().__init__(parent); self.setObjectName("settingsDialog"); self.setWindowTitle("Settings"); self.setModal(True); self.setMinimumWidth(500)
         root=QVBoxLayout(self); root.setContentsMargins(24,20,24,20); root.setSpacing(12)
@@ -88,7 +89,7 @@ class SettingsDialog(QDialog):
                 self.error_label.setText("Enter a valid proxy URL, such as socks5://127.0.0.1:1080."); self.error_label.show(); return False
         self.error_label.hide(); return True
     def accept(self):
-        if self._validate(): super().accept()
+        if self._validate(): self.save_requested.emit()
 
 class MainWindow(QMainWindow):
     PROGRESS_COLUMN=3; STATUS_COLUMN=4
@@ -218,11 +219,13 @@ class MainWindow(QMainWindow):
         if snap:QDesktopServices.openUrl(QUrl.fromLocalFile(snap["output_dir"]))
     def _show_settings(self):self._create_settings_dialog().exec()
     def _create_settings_dialog(self):
-        dialog=SettingsDialog(self.settings,self); dialog.accepted.connect(lambda:self._apply_settings_dialog(dialog)); return dialog
+        dialog=SettingsDialog(self.settings,self); dialog.save_requested.connect(lambda:self._apply_settings_dialog(dialog)); return dialog
     def _apply_settings_dialog(self,dialog):
         output=dialog.output_dir_edit.text().strip()
         if output:self.settings.output_dir=Path(output)
         self.settings.use_proxy=dialog.proxy_enabled_checkbox.isChecked(); self.settings.proxy_url=dialog.proxy_url_edit.text().strip() or None; self.settings.cookie_browser=dialog.cookie_browser_combo.currentData(); self.settings.concurrent_downloads=dialog.concurrent_downloads_spin.value(); self.settings.startup_behavior=dialog.startup_behavior_combo.currentData(); self.settings.theme=dialog.theme_combo.currentData()
         try: self.settings.save()
-        except OSError as error: dialog.error_label.setText(f"Could not save settings: {error}"); dialog.error_label.show(); return
+        except OSError as error: dialog.error_label.setText(f"Could not save settings: {error}"); dialog.error_label.show(); return False
         self.thread_pool.setMaxThreadCount(self.settings.concurrent_downloads); self.output_dir_edit.setText(str(self.settings.output_dir)); self.theme_combo.blockSignals(True); self.theme_combo.setCurrentIndex(max(0,self.theme_combo.findData(self.settings.theme))); self.theme_combo.blockSignals(False); self.apply_theme(self.settings.theme)
+        dialog.done(QDialog.Accepted)
+        return True
