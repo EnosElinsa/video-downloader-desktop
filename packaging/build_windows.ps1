@@ -150,7 +150,9 @@ $distRoot = Assert-ChildPath $distRoot
 $requestedFFmpeg = if ($FFmpegPath) { Resolve-FFmpegExecutable $FFmpegPath } else { $null }
 if ($requestedFFmpeg) {
     $buildPrefix = $buildRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
-    if ($requestedFFmpeg.StartsWith($buildPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $distPrefix = $distRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if ($requestedFFmpeg.StartsWith($buildPrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $requestedFFmpeg.StartsWith($distPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
         $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("video-downloader-ffmpeg-" + [Guid]::NewGuid().ToString("N"))
         New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
         Copy-Item -LiteralPath $requestedFFmpeg -Destination (Join-Path $stagingRoot "ffmpeg.exe")
