@@ -15,6 +15,8 @@
 - `.test-tmp/ui-redesign/empty-dark.png` (1366x768)
 - `.test-tmp/ui-redesign/populated-dark.png` (1366x768)
 - `.test-tmp/ui-redesign/populated-light.png` (1180x760)
+- `.test-tmp/ui-redesign/empty-dark-1067x750.png` (1067x750)
+- `.test-tmp/ui-redesign/populated-dark-1067x750.png` (1067x750)
 
 ## Visual decisions
 - 68px header with real application icon, theme toggle, settings action, and queue summary.
@@ -23,8 +25,10 @@
 - Empty queue is centered and purposeful; activity is collapsed by default and clears from inside its drawer.
 - Settings are split into General and Network & access groups with Save/Cancel semantics.
 
-## Known deviations
-- Offscreen CI image inspection shows square glyph placeholders because this host's Qt runtime reports a missing font directory; the stylesheet requests Segoe UI Variable/Segoe UI and renders normally on Windows 10/11.
+## Round 1 fixes
+- Restored worker bridge provenance guards for event, finished, and failed callbacks.
+- Added explicit quality labels, Enter/Ctrl+Enter submission, standard play icon, stable accessibility names, settings validation, and minimum-size geometry coverage.
+- The render tool sets `QT_QPA_FONTDIR=C:\\Windows\\Fonts` for deterministic readable offscreen typography while production continues to request Segoe UI Variable/Segoe UI.
 
 ## Commit
 - `b18ea581d2bc1696a512effe3d73f9458ec5cbd5`

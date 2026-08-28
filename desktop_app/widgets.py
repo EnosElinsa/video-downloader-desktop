@@ -2,7 +2,7 @@
 from __future__ import annotations
 from urllib.parse import urlparse
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPlainTextEdit, QProgressBar, QPushButton, QVBoxLayout, QWidget
 
 def _icon_button(widget, icon, tooltip):
     button = QPushButton(widget); button.setObjectName("iconButton"); button.setIcon(icon); button.setToolTip(tooltip); button.setAccessibleName(tooltip); button.setFocusPolicy(Qt.StrongFocus); return button
@@ -13,6 +13,13 @@ class ProgressCell(QWidget):
         layout = QHBoxLayout(self); layout.setContentsMargins(0,0,0,0); layout.addWidget(self.bar)
     def set_value(self, value): self.bar.setValue(max(0,min(100,int(value or 0))))
     def value(self): return self.bar.value()
+
+class UrlInput(QPlainTextEdit):
+    submit_requested = Signal()
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter) and event.modifiers() in (Qt.NoModifier, Qt.ControlModifier, Qt.MetaModifier):
+            self.submit_requested.emit(); event.accept(); return
+        super().keyPressEvent(event)
 
 class DownloadCard(QFrame):
     action_requested = Signal(str, str)
@@ -29,7 +36,10 @@ class DownloadCard(QFrame):
             button.clicked.connect(lambda _checked=False,a=action: self.action_requested.emit(self.item_id,a)); actions.addWidget(button)
         root.addLayout(actions); self.set_status("queued")
     @staticmethod
-    def _quality_label(value): return "Automatic" if value in {"bv*+ba/b","best"} else value
+    def _quality_label(value):
+        if value == "bv*+ba/b": return "Automatic"
+        if value == "best": return "Best single file"
+        return value
     def set_status(self,status,percent=None,speed=None,eta=None):
         self.status_label.setText(status.title().replace("_"," ")); self.status_label.setObjectName(f"status{status.title().replace('_','')}"); self.status_label.style().unpolish(self.status_label); self.status_label.style().polish(self.status_label)
         self.start_button.setVisible(status=="queued"); self.retry_button.setVisible(status in {"failed","cancelled"}); self.cancel_button.setVisible(status in {"queued","running","paused","cancelling"}); self.open_button.setVisible(status=="success"); self.remove_button.setVisible(status in {"queued","success","failed","cancelled"})

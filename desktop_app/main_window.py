@@ -1,6 +1,7 @@
 """Thread-safe production desktop window for Video Downloader."""
 from __future__ import annotations
 import threading
+import os
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
@@ -10,7 +11,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, 
 from .models import DownloadEvent, DownloadRequest, DownloadResult
 from .queue import DownloadQueue
 from .theme import app_font, stylesheet
-from .widgets import DownloadCard, QueueList
+from .widgets import DownloadCard, QueueList, UrlInput
 
 class WorkerSignals(QObject):
     _event=Signal(object); _finished=Signal(object); _failed=Signal(str)
@@ -61,15 +62,33 @@ class SettingsDialog(QDialog):
         self.general_group=QGroupBox("General",self); general=QFormLayout(self.general_group); general.setSpacing(10)
         output=QWidget(self); output_layout=QHBoxLayout(output); output_layout.setContentsMargins(0,0,0,0); self.output_dir_edit=QLineEdit(str(settings.output_dir),output); self.output_dir_edit.setObjectName("settingsOutputDirectory"); browse=QPushButton("Browse",output); browse.clicked.connect(self._choose_output_dir); output_layout.addWidget(self.output_dir_edit,1); output_layout.addWidget(browse); general.addRow("Output directory",output)
         self.concurrent_downloads_spin=QSpinBox(self); self.concurrent_downloads_spin.setRange(1,8); self.concurrent_downloads_spin.setValue(max(1,int(settings.concurrent_downloads))); self.concurrent_downloads_spin.setObjectName("concurrentDownloads"); general.addRow("Concurrent downloads",self.concurrent_downloads_spin)
-        self.startup_behavior_combo=QComboBox(self); self.startup_behavior_combo.addItem("Open normally","normal"); self.startup_behavior_combo.addItem("Start minimized","minimized"); self.startup_behavior_combo.setCurrentIndex(max(0,self.startup_behavior_combo.findData(settings.startup_behavior))); general.addRow("Startup",self.startup_behavior_combo)
-        self.theme_combo=QComboBox(self); self.theme_combo.addItem("Dark","dark"); self.theme_combo.addItem("Light","light"); self.theme_combo.setCurrentIndex(max(0,self.theme_combo.findData(settings.theme))); general.addRow("Theme",self.theme_combo); root.addWidget(self.general_group)
+        self.startup_behavior_combo=QComboBox(self); self.startup_behavior_combo.setObjectName("startupBehavior"); self.startup_behavior_combo.setAccessibleName("Startup behavior"); self.startup_behavior_combo.addItem("Open normally","normal"); self.startup_behavior_combo.addItem("Start minimized","minimized"); self.startup_behavior_combo.setCurrentIndex(max(0,self.startup_behavior_combo.findData(settings.startup_behavior))); general.addRow("Startup",self.startup_behavior_combo)
+        self.theme_combo=QComboBox(self); self.theme_combo.setObjectName("settingsTheme"); self.theme_combo.setAccessibleName("Theme"); self.theme_combo.addItem("Dark","dark"); self.theme_combo.addItem("Light","light"); self.theme_combo.setCurrentIndex(max(0,self.theme_combo.findData(settings.theme))); general.addRow("Theme",self.theme_combo); root.addWidget(self.general_group)
         self.network_group=QGroupBox("Network & access",self); network=QFormLayout(self.network_group); network.setSpacing(10)
-        self.proxy_enabled_checkbox=QCheckBox("Use proxy",self); self.proxy_enabled_checkbox.setChecked(bool(settings.use_proxy)); network.addRow("Proxy",self.proxy_enabled_checkbox); self.proxy_url_edit=QLineEdit(settings.proxy_url or "",self); self.proxy_url_edit.setPlaceholderText("socks5://127.0.0.1:1080"); self.proxy_enabled_checkbox.toggled.connect(self.proxy_url_edit.setEnabled); self.proxy_url_edit.setEnabled(self.proxy_enabled_checkbox.isChecked()); network.addRow("Proxy address",self.proxy_url_edit)
-        self.cookie_browser_combo=QComboBox(self); [(self.cookie_browser_combo.addItem(label,value)) for label,value in (("None",None),("Chrome","chrome"),("Edge","edge"),("Firefox","firefox"),("Brave","brave"),("Opera","opera"),("Chromium","chromium"))]; self.cookie_browser_combo.setCurrentIndex(max(0,self.cookie_browser_combo.findData(settings.cookie_browser or None))); network.addRow("Browser cookies",self.cookie_browser_combo); root.addWidget(self.network_group)
-        buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel,self); buttons.accepted.connect(self.accept); buttons.rejected.connect(self.reject); root.addWidget(buttons)
+        self.proxy_enabled_checkbox=QCheckBox("Use proxy",self); self.proxy_enabled_checkbox.setObjectName("proxyEnabled"); self.proxy_enabled_checkbox.setAccessibleName("Use proxy"); self.proxy_enabled_checkbox.setChecked(bool(settings.use_proxy)); network.addRow("Proxy",self.proxy_enabled_checkbox); self.proxy_url_edit=QLineEdit(settings.proxy_url or "",self); self.proxy_url_edit.setObjectName("proxyUrl"); self.proxy_url_edit.setAccessibleName("Proxy URL"); self.proxy_url_edit.setPlaceholderText("socks5://127.0.0.1:1080"); self.proxy_enabled_checkbox.toggled.connect(self.proxy_url_edit.setEnabled); self.proxy_url_edit.setEnabled(self.proxy_enabled_checkbox.isChecked()); network.addRow("Proxy address",self.proxy_url_edit)
+        self.cookie_browser_combo=QComboBox(self); self.cookie_browser_combo.setObjectName("browserCookies"); self.cookie_browser_combo.setAccessibleName("Browser cookies"); [(self.cookie_browser_combo.addItem(label,value)) for label,value in (("None",None),("Chrome","chrome"),("Edge","edge"),("Firefox","firefox"),("Brave","brave"),("Opera","opera"),("Chromium","chromium"))]; self.cookie_browser_combo.setCurrentIndex(max(0,self.cookie_browser_combo.findData(settings.cookie_browser or None))); network.addRow("Browser cookies",self.cookie_browser_combo); root.addWidget(self.network_group)
+        self.error_label=QLabel(self); self.error_label.setObjectName("settingsError"); self.error_label.setStyleSheet("color:#F06A75;"); self.error_label.setWordWrap(True); self.error_label.hide(); root.addWidget(self.error_label)
+        buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel,self); self.save_button=buttons.button(QDialogButtonBox.Save); self.save_button.setObjectName("settingsSave"); self.save_button.setAccessibleName("Save settings"); self.cancel_button=buttons.button(QDialogButtonBox.Cancel); self.cancel_button.setObjectName("settingsCancel"); self.cancel_button.setAccessibleName("Cancel settings"); buttons.accepted.connect(self.accept); buttons.rejected.connect(self.reject); root.addWidget(buttons)
+        browse.setObjectName("settingsBrowse"); browse.setAccessibleName("Browse output directory")
     def _choose_output_dir(self):
         chosen=QFileDialog.getExistingDirectory(self,"Choose output directory",self.output_dir_edit.text())
         if chosen: self.output_dir_edit.setText(chosen)
+    def _validate(self):
+        raw=self.output_dir_edit.text().strip()
+        if not raw: self.error_label.setText("Choose an output directory."); self.error_label.show(); return False
+        try:
+            path=Path(raw)
+            if path.exists() and not path.is_dir(): raise OSError("path is not a directory")
+            path.mkdir(parents=True, exist_ok=True)
+            if not os.access(path, os.W_OK): raise OSError("directory is not writable")
+        except OSError as error: self.error_label.setText(f"Output directory is not writable: {error}"); self.error_label.show(); return False
+        if self.proxy_enabled_checkbox.isChecked():
+            parsed=urlparse(self.proxy_url_edit.text().strip())
+            if parsed.scheme not in {"http","https","socks5","socks5h"} or not parsed.netloc:
+                self.error_label.setText("Enter a valid proxy URL, such as socks5://127.0.0.1:1080."); self.error_label.show(); return False
+        self.error_label.hide(); return True
+    def accept(self):
+        if self._validate(): super().accept()
 
 class MainWindow(QMainWindow):
     PROGRESS_COLUMN=3; STATUS_COLUMN=4
@@ -85,14 +104,14 @@ class MainWindow(QMainWindow):
         content=QWidget(root); layout=QVBoxLayout(content); layout.setContentsMargins(32,24,32,24); layout.setSpacing(14); outer.addWidget(content,1)
         heading=QLabel("Download videos",content); heading.setObjectName("pageTitle"); layout.addWidget(heading); sub=QLabel("Paste one or more links, choose a quality, and add them to your queue.",content); sub.setObjectName("muted"); layout.addWidget(sub)
         composer=QFrame(content); composer.setObjectName("composer"); form=QGridLayout(composer); form.setContentsMargins(16,14,16,16); form.setHorizontalSpacing(10); form.setVerticalSpacing(8)
-        label=QLabel("Video URLs",composer); label.setObjectName("sectionTitle"); form.addWidget(label,0,0,1,3); self.url_input=QPlainTextEdit(composer); self.url_input.setObjectName("urlInput"); self.url_input.setPlaceholderText("Paste one or more video URLs, one per line"); self.url_input.setFixedHeight(76); form.addWidget(self.url_input,1,0,1,3)
+        label=QLabel("Video URLs",composer); label.setObjectName("sectionTitle"); form.addWidget(label,0,0,1,3); self.url_input=UrlInput(composer); self.url_input.setObjectName("urlInput"); self.url_input.setAccessibleName("Video URLs"); self.url_input.setPlaceholderText("Paste one or more video URLs, one per line"); self.url_input.setFixedHeight(76); self.url_input.submit_requested.connect(lambda: self.add_urls(self.url_input.toPlainText())); form.addWidget(self.url_input,1,0,1,3)
         out_label=QLabel("Output folder",composer); out_label.setObjectName("muted"); form.addWidget(out_label,2,0); self.output_dir_edit=QLineEdit(str(self.settings.output_dir),composer); self.output_dir_edit.setObjectName("outputDirectory"); self.output_dir_edit.editingFinished.connect(self._persist_output_dir); form.addWidget(self.output_dir_edit,2,1); browse=QPushButton("Browse",composer); browse.clicked.connect(self._choose_output_dir); form.addWidget(browse,2,2)
-        quality_label=QLabel("Quality",composer); quality_label.setObjectName("muted"); form.addWidget(quality_label,3,0); self.format_combo=QComboBox(composer); self.format_combo.setObjectName("qualityCombo"); self.format_combo.addItem("Automatic (best)","bv*+ba/b"); self.format_combo.addItem("Best single file","best"); idx=self.format_combo.findData(self.settings.format_selector); self.format_combo.setCurrentIndex(idx if idx>=0 else 0); form.addWidget(self.format_combo,3,1); self.add_button=QPushButton("Add to queue",composer); self.add_button.setObjectName("addToQueueButton"); self.add_button.setAccessibleName("Add to queue"); self.add_button.clicked.connect(lambda: self.add_urls(self.url_input.toPlainText())); form.addWidget(self.add_button,3,2); layout.addWidget(composer)
+        quality_label=QLabel("Quality",composer); quality_label.setObjectName("muted"); form.addWidget(quality_label,3,0); self.format_combo=QComboBox(composer); self.format_combo.setObjectName("qualityCombo"); self.format_combo.addItem("Automatic (best)","bv*+ba/b"); self.format_combo.addItem("Best single file","best"); idx=self.format_combo.findData(self.settings.format_selector); self.format_combo.setCurrentIndex(idx if idx>=0 else 0); form.addWidget(self.format_combo,3,1); self.add_button=QPushButton("Add to queue",composer); self.add_button.setObjectName("addToQueueButton"); self.add_button.setAccessibleName("Add to queue"); self.add_button.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_MediaPlay)); self.add_button.clicked.connect(lambda: self.add_urls(self.url_input.toPlainText())); form.addWidget(self.add_button,3,2); layout.addWidget(composer)
         queue_heading=QHBoxLayout(); qlabel=QLabel("Download queue",content); qlabel.setObjectName("sectionTitle"); queue_heading.addWidget(qlabel); queue_heading.addStretch(); layout.addLayout(queue_heading)
         scroll=QScrollArea(content); scroll.setObjectName("queueScroll"); scroll.setWidgetResizable(True); self.queue_list=QueueList(); self.queue_list.setObjectName("queueList"); scroll.setWidget(self.queue_list); self.queue_table=self.queue_list; layout.addWidget(scroll,1)
         self.empty_state=QWidget(self.queue_list); empty_layout=QVBoxLayout(self.empty_state); empty_layout.setContentsMargins(16,44,16,44); empty_layout.setAlignment(Qt.AlignCenter); empty_title=QLabel("No downloads yet",self.empty_state); empty_title.setFont(app_font(14,600)); empty_title.setAlignment(Qt.AlignCenter); empty_line=QLabel("Your queued videos will appear here.",self.empty_state); empty_line.setObjectName("muted"); empty_line.setAlignment(Qt.AlignCenter); empty_layout.addWidget(empty_title); empty_layout.addWidget(empty_line); self.queue_list.layout.insertWidget(0,self.empty_state)
-        activity=QHBoxLayout(); self.latest_activity=QLabel("No recent activity",content); self.latest_activity.setObjectName("latestActivity"); activity.addWidget(self.latest_activity,1); self.activity_toggle=QPushButton("View activity",content); self.activity_toggle.setObjectName("activityToggle"); self.activity_toggle.clicked.connect(self._toggle_activity); activity.addWidget(self.activity_toggle); layout.addLayout(activity)
-        self.activity_drawer=QFrame(content); self.activity_drawer.setObjectName("activityDrawer"); drawer_layout=QVBoxLayout(self.activity_drawer); drawer_head=QHBoxLayout(); drawer_head.addWidget(QLabel("Activity",self.activity_drawer)); drawer_head.addStretch(); self.activity_clear=QPushButton("Clear",self.activity_drawer); self.activity_clear.clicked.connect(lambda: self.activity_log.clear()); drawer_head.addWidget(self.activity_clear); drawer_layout.addLayout(drawer_head); self.activity_log=QPlainTextEdit(self.activity_drawer); self.activity_log.setReadOnly(True); self.activity_log.setObjectName("activityLog"); self.activity_log.setFixedHeight(100); drawer_layout.addWidget(self.activity_log); self.activity_drawer.setVisible(False); layout.addWidget(self.activity_drawer)
+        activity=QHBoxLayout(); self.latest_activity=QLabel("No recent activity",content); self.latest_activity.setObjectName("latestActivity"); activity.addWidget(self.latest_activity,1); self.activity_toggle=QPushButton("View activity",content); self.activity_toggle.setObjectName("activityToggle"); self.activity_toggle.setAccessibleName("View activity"); self.activity_toggle.clicked.connect(self._toggle_activity); activity.addWidget(self.activity_toggle); layout.addLayout(activity)
+        self.activity_drawer=QFrame(content); self.activity_drawer.setObjectName("activityDrawer"); self.activity_drawer.setAccessibleName("Activity drawer"); drawer_layout=QVBoxLayout(self.activity_drawer); drawer_head=QHBoxLayout(); drawer_head.addWidget(QLabel("Activity",self.activity_drawer)); drawer_head.addStretch(); self.activity_clear=QPushButton("Clear",self.activity_drawer); self.activity_clear.setObjectName("activityClear"); self.activity_clear.setAccessibleName("Clear activity"); self.activity_clear.clicked.connect(lambda: self.activity_log.clear()); drawer_head.addWidget(self.activity_clear); drawer_layout.addLayout(drawer_head); self.activity_log=QPlainTextEdit(self.activity_drawer); self.activity_log.setReadOnly(True); self.activity_log.setObjectName("activityLog"); self.activity_log.setFixedHeight(100); drawer_layout.addWidget(self.activity_log); self.activity_drawer.setVisible(False); layout.addWidget(self.activity_drawer)
     def apply_theme(self,mode):
         mode=mode if mode in ("dark","light") else "dark"; self.settings.theme=mode; self.setStyleSheet(stylesheet(mode))
     def _toggle_activity(self): self.activity_drawer.setVisible(not self.activity_drawer.isVisible()); self.activity_toggle.setText("Hide activity" if self.activity_drawer.isVisible() else "View activity")
@@ -143,6 +162,8 @@ class MainWindow(QMainWindow):
         self.empty_state.setVisible(not self._cards); self._update_header()
     @Slot(str,object)
     def _handle_event(self,item_id,event):
+        sender=self.sender()
+        if sender is not None and sender is not self._bridges.get(item_id): return
         if not isinstance(event,DownloadEvent) or item_id in self._pending_retries:return
         current=next((i for i in self.queue.snapshot() if i["id"]==item_id),None)
         if current is None or current["status"]=="cancelled":return
@@ -153,6 +174,8 @@ class MainWindow(QMainWindow):
         elif event.kind=="cancelled":self._mark_cancelled(item_id)
     @Slot(str,object)
     def _handle_finished(self,item_id,result):
+        sender=self.sender()
+        if sender is not None and sender is not self._bridges.get(item_id): return
         self._workers.pop(item_id,None); self._bridges.pop(item_id,None)
         if self._start_pending_retry(item_id):return
         current=next((i for i in self.queue.snapshot() if i["id"]==item_id),None)
@@ -161,6 +184,8 @@ class MainWindow(QMainWindow):
         else:self._mark_cancelled(item_id) if result.error_code=="cancelled" else self._mark_failed(item_id,result.error_message or "Download failed",result.error_code)
     @Slot(str,str)
     def _handle_failed(self,item_id,error):
+        sender=self.sender()
+        if sender is not None and sender is not self._bridges.get(item_id): return
         self._workers.pop(item_id,None); self._bridges.pop(item_id,None)
         if self._start_pending_retry(item_id):return
         self._mark_failed(item_id,error,"download_failed")
@@ -197,4 +222,7 @@ class MainWindow(QMainWindow):
     def _apply_settings_dialog(self,dialog):
         output=dialog.output_dir_edit.text().strip()
         if output:self.settings.output_dir=Path(output)
-        self.settings.use_proxy=dialog.proxy_enabled_checkbox.isChecked(); self.settings.proxy_url=dialog.proxy_url_edit.text().strip() or None; self.settings.cookie_browser=dialog.cookie_browser_combo.currentData(); self.settings.concurrent_downloads=dialog.concurrent_downloads_spin.value(); self.settings.startup_behavior=dialog.startup_behavior_combo.currentData(); self.settings.theme=dialog.theme_combo.currentData(); self.settings.save(); self.thread_pool.setMaxThreadCount(self.settings.concurrent_downloads); self.output_dir_edit.setText(str(self.settings.output_dir)); self.theme_combo.blockSignals(True); self.theme_combo.setCurrentIndex(max(0,self.theme_combo.findData(self.settings.theme))); self.theme_combo.blockSignals(False); self.apply_theme(self.settings.theme)
+        self.settings.use_proxy=dialog.proxy_enabled_checkbox.isChecked(); self.settings.proxy_url=dialog.proxy_url_edit.text().strip() or None; self.settings.cookie_browser=dialog.cookie_browser_combo.currentData(); self.settings.concurrent_downloads=dialog.concurrent_downloads_spin.value(); self.settings.startup_behavior=dialog.startup_behavior_combo.currentData(); self.settings.theme=dialog.theme_combo.currentData()
+        try: self.settings.save()
+        except OSError as error: dialog.error_label.setText(f"Could not save settings: {error}"); dialog.error_label.show(); return
+        self.thread_pool.setMaxThreadCount(self.settings.concurrent_downloads); self.output_dir_edit.setText(str(self.settings.output_dir)); self.theme_combo.blockSignals(True); self.theme_combo.setCurrentIndex(max(0,self.theme_combo.findData(self.settings.theme))); self.theme_combo.blockSignals(False); self.apply_theme(self.settings.theme)

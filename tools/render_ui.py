@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("QT_QPA_FONTDIR", r"C:\Windows\Fonts")
 from PySide6.QtWidgets import QApplication
 from desktop_app.main_window import MainWindow
 from desktop_app.models import DownloadResult
@@ -27,7 +28,8 @@ def make(mode, size, name, populated=False):
             elif status == "failed": window.queue.update_status(card.item_id, "running"); window.queue.update_status(card.item_id, "failed", percent=percent, error="Network unavailable")
             window._set_status(card.item_id, status)
         window._log("Download failed: network unavailable")
-        window.activity_drawer.show()
+        # Keep the activity drawer collapsed in the queue-focused release captures.
+        window.activity_drawer.hide()
     QApplication.processEvents()
     OUT.mkdir(parents=True, exist_ok=True)
     window.grab().save(str(OUT / name))
@@ -38,3 +40,5 @@ if __name__ == "__main__":
     make("dark", (1366, 768), "empty-dark.png")
     make("dark", (1366, 768), "populated-dark.png", True)
     make("light", (1180, 760), "populated-light.png", True)
+    make("dark", (1067, 750), "empty-dark-1067x750.png")
+    make("dark", (1067, 750), "populated-dark-1067x750.png", True)
