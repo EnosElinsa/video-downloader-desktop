@@ -19,28 +19,45 @@ from .widgets import ProgressCell, RowActions
 
 
 class WorkerSignals(QObject):
-    event = Signal(object)
-    finished = Signal(object)
+    """Typed service-to-worker signal contract.
+
+    PySide exposes user-defined Python dataclasses to Qt as ``PyObject`` at
+    the meta-object layer. Declaring the Python classes here and routing all
+    emissions through validating methods keeps the public contract explicit.
+    """
+
+    event = Signal(DownloadEvent)
+    finished = Signal(DownloadResult)
     failed = Signal(str)
+
+    def emit_event(self, event: DownloadEvent) -> None:
+        if not isinstance(event, DownloadEvent):
+            raise TypeError("event must be a DownloadEvent")
+        self.event.emit(event)
+
+    def emit_finished(self, result: DownloadResult) -> None:
+        if not isinstance(result, DownloadResult):
+            raise TypeError("result must be a DownloadResult")
+        self.finished.emit(result)
 
 
 class WorkerBridge(QObject):
     """QObject receiver that marshals worker callbacks onto the GUI thread."""
 
-    event_for_item = Signal(str, object)
-    finished_for_item = Signal(str, object)
+    event_for_item = Signal(str, DownloadEvent)
+    finished_for_item = Signal(str, DownloadResult)
     failed_for_item = Signal(str, str)
 
     def __init__(self, item_id, parent=None):
         super().__init__(parent)
         self.item_id = item_id
 
-    @Slot(object)
-    def on_event(self, event):
+    @Slot(DownloadEvent)
+    def on_event(self, event: DownloadEvent) -> None:
         self.event_for_item.emit(self.item_id, event)
 
-    @Slot(object)
-    def on_finished(self, result):
+    @Slot(DownloadResult)
+    def on_finished(self, result: DownloadResult) -> None:
         self.finished_for_item.emit(self.item_id, result)
 
     @Slot(str)
@@ -59,10 +76,10 @@ class DownloadWorker(QRunnable):
     @Slot()
     def run(self):
         try:
-            result = self.service.download(self.request, self.signals.event.emit, self.cancel_event)
+            result = self.service.download(self.request, self.signals.emit_event, self.cancel_event)
             if not isinstance(result, DownloadResult):
                 result = DownloadResult(bool(result), None, None, None, None)
-            self.signals.finished.emit(result)
+            self.signals.emit_finished(result)
         except Exception as exc:  # worker failures are always marshalled as data
             self.signals.failed.emit(str(exc))
 
@@ -178,7 +195,7 @@ class MainWindow(QMainWindow):
         snapshot = next((i for i in self.queue.snapshot() if i["id"] == item_id), None)
         if not snapshot or snapshot["status"] != "queued": return
         self.queue.update_status(item_id, "running"); self._set_status(item_id, "running")
-        item = self.queue._items[item_id]
+        item = self.queue.get(item_id)
         worker = DownloadWorker(self.service, item.request)
         bridge = WorkerBridge(item_id, self)
         self._workers[item_id] = worker
@@ -228,8 +245,8 @@ class MainWindow(QMainWindow):
             self.queue_table.removeRow(row)
             self._row_for_item = {key: (value - 1 if value > row else value) for key, value in self._row_for_item.items()}
 
-    @Slot(str, object)
-    def _handle_event(self, item_id, event):
+    @Slot(str, DownloadEvent)
+    def _handle_event(self, item_id: str, event: DownloadEvent) -> None:
         if not isinstance(event, DownloadEvent): return
         sender = self.sender()
         if sender is not None and sender is not self._bridges.get(item_id):
@@ -245,8 +262,8 @@ class MainWindow(QMainWindow):
         if event.kind == "failed": self._mark_failed(item_id, event.message, event.error_code)
         elif event.kind == "cancelled": self._mark_cancelled(item_id)
 
-    @Slot(str, object)
-    def _handle_finished(self, item_id, result):
+    @Slot(str, DownloadResult)
+    def _handle_finished(self, item_id: str, result: DownloadResult) -> None:
         sender = self.sender()
         if sender is not None and sender is not self._bridges.get(item_id):
             return

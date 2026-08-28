@@ -52,6 +52,11 @@ class DownloadQueue:
             self._items[item_id] = QueueItem(item_id, request)
             return item_id
 
+    def get(self, item_id: str) -> QueueItem:
+        """Return the queue item for read access through the public API."""
+        with self._lock:
+            return self._item(item_id)
+
     def _item(self, item_id: str) -> QueueItem:
         try:
             return self._items[item_id]

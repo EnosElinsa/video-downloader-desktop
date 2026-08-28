@@ -74,3 +74,16 @@ def test_queue_validates_transitions_and_remove(tmp_path):
         queue.cancel(item_id)
     queue.remove(item_id)
     assert queue.snapshot() == []
+
+
+def test_queue_get_exposes_item_without_private_storage_access(tmp_path):
+    queue = DownloadQueue()
+    request = DownloadRequest("https://example.test", tmp_path)
+    item_id = queue.add(request)
+
+    item = queue.get(item_id)
+
+    assert item.id == item_id
+    assert item.request is request
+    with pytest.raises(KeyError, match="unknown queue item"):
+        queue.get("missing")

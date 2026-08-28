@@ -28,3 +28,10 @@
 - Replaced lambda-based worker connections with `WorkerBridge` QObject receivers and explicit `Qt.QueuedConnection` links for event, finished, and failed signals.
 - Added sender/bridge identity filtering and invalidation on retry, preventing late callbacks from a cancelled run from mutating or completing the retried row.
 - Added regression coverage for GUI-thread event delivery and cancel→retry→late-event races.
+
+## Round 2 review fixes
+
+- Declared `WorkerSignals` and `WorkerBridge` event/result channels using the `DownloadEvent` and `DownloadResult` dataclass types, and typed their receiving slots.
+- Added validating `emit_event`/`emit_finished` APIs because Qt represents custom Python dataclasses as `PyObject` internally; invalid payloads now fail at the worker boundary with a clear `TypeError`.
+- Added `DownloadQueue.get(item_id)` and removed the desktop shell's direct access to the queue's private `_items` mapping.
+- Added tests for both the typed worker-signal boundary and public queue accessor.

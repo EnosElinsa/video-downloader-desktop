@@ -9,7 +9,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QApplication
 
-from desktop_app.main_window import MainWindow
+from desktop_app.main_window import MainWindow, WorkerSignals
 
 
 class FakeService:
@@ -138,3 +138,18 @@ def test_cancel_retry_discards_late_events_from_old_worker(qtbot, tmp_path):
     qtbot.waitUntil(lambda: window.queue.snapshot()[0]["status"] == "success")
 
     assert window.queue_table.cellWidget(0, window.PROGRESS_COLUMN).value() == 10
+
+
+def test_worker_signal_api_validates_typed_payloads(qtbot):
+    signals = WorkerSignals()
+    received = []
+    signals.event.connect(received.append)
+    event = DownloadEvent("progress", percent=25)
+
+    signals.emit_event(event)
+
+    assert received == [event]
+    with pytest.raises(TypeError, match="DownloadEvent"):
+        signals.emit_event("not an event")
+    with pytest.raises(TypeError, match="DownloadResult"):
+        signals.emit_finished("not a result")
