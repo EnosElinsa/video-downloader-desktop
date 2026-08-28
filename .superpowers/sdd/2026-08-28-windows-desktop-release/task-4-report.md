@@ -35,3 +35,9 @@
 - Added validating `emit_event`/`emit_finished` APIs because Qt represents custom Python dataclasses as `PyObject` internally; invalid payloads now fail at the worker boundary with a clear `TypeError`.
 - Added `DownloadQueue.get(item_id)` and removed the desktop shell's direct access to the queue's private `_items` mapping.
 - Added tests for both the typed worker-signal boundary and public queue accessor.
+
+## Round 3 review fix
+
+- Made every raw Qt signal on `WorkerSignals` and `WorkerBridge` private.
+- Exposed typed `connect_event`/`connect_finished`/`connect_failed` methods and validating typed emit methods, so callers cannot bypass validation with a public `Signal.emit(...)` call.
+- Preserved explicit `Qt.QueuedConnection` delivery through the public connection API and added a regression test proving no public raw-signal emission bypass remains.

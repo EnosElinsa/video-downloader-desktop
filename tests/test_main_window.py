@@ -143,7 +143,7 @@ def test_cancel_retry_discards_late_events_from_old_worker(qtbot, tmp_path):
 def test_worker_signal_api_validates_typed_payloads(qtbot):
     signals = WorkerSignals()
     received = []
-    signals.event.connect(received.append)
+    signals.connect_event(received.append)
     event = DownloadEvent("progress", percent=25)
 
     signals.emit_event(event)
@@ -153,3 +153,15 @@ def test_worker_signal_api_validates_typed_payloads(qtbot):
         signals.emit_event("not an event")
     with pytest.raises(TypeError, match="DownloadResult"):
         signals.emit_finished("not a result")
+
+
+def test_worker_signal_api_has_no_public_raw_emit_bypass():
+    signals = WorkerSignals()
+
+    # QObject itself has an event(QEvent) method; it must not be an emit-able
+    # public signal carrying arbitrary Python values.
+    assert not hasattr(signals.event, "emit")
+    assert not hasattr(signals, "finished")
+    assert not hasattr(signals, "failed")
+    assert callable(signals.connect_event)
+    assert callable(signals.connect_finished)

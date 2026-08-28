@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
+from typing import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Qt, Signal, Slot
 from PySide6.QtGui import QDesktopServices
@@ -22,47 +23,74 @@ class WorkerSignals(QObject):
     """Typed service-to-worker signal contract.
 
     PySide exposes user-defined Python dataclasses to Qt as ``PyObject`` at
-    the meta-object layer. Declaring the Python classes here and routing all
-    emissions through validating methods keeps the public contract explicit.
+    the meta-object layer. Raw Qt signals therefore stay private; the public
+    connect/emit methods provide and validate the typed contract.
     """
 
-    event = Signal(DownloadEvent)
-    finished = Signal(DownloadResult)
-    failed = Signal(str)
+    _event = Signal(object)
+    _finished = Signal(object)
+    _failed = Signal(str)
+
+    def connect_event(self, receiver: Callable[[DownloadEvent], None], connection_type: Qt.ConnectionType = Qt.AutoConnection) -> None:
+        self._event.connect(receiver, connection_type)
+
+    def connect_finished(self, receiver: Callable[[DownloadResult], None], connection_type: Qt.ConnectionType = Qt.AutoConnection) -> None:
+        self._finished.connect(receiver, connection_type)
+
+    def connect_failed(self, receiver: Callable[[str], None], connection_type: Qt.ConnectionType = Qt.AutoConnection) -> None:
+        self._failed.connect(receiver, connection_type)
 
     def emit_event(self, event: DownloadEvent) -> None:
         if not isinstance(event, DownloadEvent):
             raise TypeError("event must be a DownloadEvent")
-        self.event.emit(event)
+        self._event.emit(event)
 
     def emit_finished(self, result: DownloadResult) -> None:
         if not isinstance(result, DownloadResult):
             raise TypeError("result must be a DownloadResult")
-        self.finished.emit(result)
+        self._finished.emit(result)
+
+    def emit_failed(self, error: str) -> None:
+        if not isinstance(error, str):
+            raise TypeError("error must be a string")
+        self._failed.emit(error)
 
 
 class WorkerBridge(QObject):
     """QObject receiver that marshals worker callbacks onto the GUI thread."""
 
-    event_for_item = Signal(str, DownloadEvent)
-    finished_for_item = Signal(str, DownloadResult)
-    failed_for_item = Signal(str, str)
+    _event_for_item = Signal(str, object)
+    _finished_for_item = Signal(str, object)
+    _failed_for_item = Signal(str, str)
 
     def __init__(self, item_id, parent=None):
         super().__init__(parent)
         self.item_id = item_id
 
+    def connect_event(self, receiver: Callable[[str, DownloadEvent], None], connection_type: Qt.ConnectionType = Qt.AutoConnection) -> None:
+        self._event_for_item.connect(receiver, connection_type)
+
+    def connect_finished(self, receiver: Callable[[str, DownloadResult], None], connection_type: Qt.ConnectionType = Qt.AutoConnection) -> None:
+        self._finished_for_item.connect(receiver, connection_type)
+
+    def connect_failed(self, receiver: Callable[[str, str], None], connection_type: Qt.ConnectionType = Qt.AutoConnection) -> None:
+        self._failed_for_item.connect(receiver, connection_type)
+
     @Slot(DownloadEvent)
     def on_event(self, event: DownloadEvent) -> None:
-        self.event_for_item.emit(self.item_id, event)
+        if not isinstance(event, DownloadEvent):
+            raise TypeError("event must be a DownloadEvent")
+        self._event_for_item.emit(self.item_id, event)
 
     @Slot(DownloadResult)
     def on_finished(self, result: DownloadResult) -> None:
-        self.finished_for_item.emit(self.item_id, result)
+        if not isinstance(result, DownloadResult):
+            raise TypeError("result must be a DownloadResult")
+        self._finished_for_item.emit(self.item_id, result)
 
     @Slot(str)
     def on_failed(self, error):
-        self.failed_for_item.emit(self.item_id, error)
+        self._failed_for_item.emit(self.item_id, error)
 
 
 class DownloadWorker(QRunnable):
@@ -81,7 +109,7 @@ class DownloadWorker(QRunnable):
                 result = DownloadResult(bool(result), None, None, None, None)
             self.signals.emit_finished(result)
         except Exception as exc:  # worker failures are always marshalled as data
-            self.signals.failed.emit(str(exc))
+            self.signals.emit_failed(str(exc))
 
 
 class MainWindow(QMainWindow):
@@ -202,12 +230,12 @@ class MainWindow(QMainWindow):
         self._bridges[item_id] = bridge
         # Explicit QObject receivers plus queued delivery prevent worker
         # threads from ever touching widgets, even for Python callables.
-        worker.signals.event.connect(bridge.on_event, Qt.QueuedConnection)
-        worker.signals.finished.connect(bridge.on_finished, Qt.QueuedConnection)
-        worker.signals.failed.connect(bridge.on_failed, Qt.QueuedConnection)
-        bridge.event_for_item.connect(self._handle_event, Qt.QueuedConnection)
-        bridge.finished_for_item.connect(self._handle_finished, Qt.QueuedConnection)
-        bridge.failed_for_item.connect(self._handle_failed, Qt.QueuedConnection)
+        worker.signals.connect_event(bridge.on_event, Qt.QueuedConnection)
+        worker.signals.connect_finished(bridge.on_finished, Qt.QueuedConnection)
+        worker.signals.connect_failed(bridge.on_failed, Qt.QueuedConnection)
+        bridge.connect_event(self._handle_event, Qt.QueuedConnection)
+        bridge.connect_finished(self._handle_finished, Qt.QueuedConnection)
+        bridge.connect_failed(self._handle_failed, Qt.QueuedConnection)
         self.thread_pool.start(worker)
 
     @Slot(str)
