@@ -21,6 +21,7 @@ $zipPath = Join-Path $distRoot "VideoDownloader-windows-x64.zip"
 $oneFile = Join-Path $distRoot "VideoDownloader-windows-x64.exe"
 $checksumPath = Join-Path $distRoot "SHA256SUMS.txt"
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+$buildChecksPath = Join-Path $PSScriptRoot "build_checks.py"
 
 function Assert-ChildPath {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -38,6 +39,20 @@ function Assert-ExitCode {
         throw "$Step failed with exit code $LASTEXITCODE"
     }
 }
+
+Write-Host "Validating Windows x64 release environment..."
+$envCheck = @"
+import platform, struct, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(r'$PSScriptRoot').resolve()))
+from build_checks import validate_release_environment
+import PyInstaller
+validate_release_environment(machine=platform.machine(), pointer_bits=struct.calcsize('P') * 8,
+                             python_version=(sys.version_info.major, sys.version_info.minor),
+                             pyinstaller_version=PyInstaller.__version__)
+"@
+python -c $envCheck
+Assert-ExitCode "Windows x64 release environment validation"
 
 function Resolve-FFmpegExecutable {
     param([string]$RequestedPath)
@@ -132,6 +147,20 @@ function New-DeterministicZip {
 
 $buildRoot = Assert-ChildPath $buildRoot
 $distRoot = Assert-ChildPath $distRoot
+$requestedFFmpeg = if ($FFmpegPath) { Resolve-FFmpegExecutable $FFmpegPath } else { $null }
+if ($requestedFFmpeg) {
+    $buildPrefix = $buildRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if ($requestedFFmpeg.StartsWith($buildPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("video-downloader-ffmpeg-" + [Guid]::NewGuid().ToString("N"))
+        New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
+        Copy-Item -LiteralPath $requestedFFmpeg -Destination (Join-Path $stagingRoot "ffmpeg.exe")
+        $siblingFFprobe = Join-Path (Split-Path $requestedFFmpeg -Parent) "ffprobe.exe"
+        if (Test-Path -LiteralPath $siblingFFprobe -PathType Leaf) {
+            Copy-Item -LiteralPath $siblingFFprobe -Destination (Join-Path $stagingRoot "ffprobe.exe")
+        }
+        $requestedFFmpeg = Join-Path $stagingRoot "ffmpeg.exe"
+    }
+}
 foreach ($target in @($buildRoot, $distRoot)) {
     if (Test-Path -LiteralPath $target) {
         Remove-Item -LiteralPath $target -Recurse -Force
@@ -152,7 +181,7 @@ Assert-ExitCode "pytest"
 python -c "import PyInstaller; print(PyInstaller.__version__)" | Out-Host
 Assert-ExitCode "PyInstaller availability check"
 
-$resolvedFFmpeg = Resolve-FFmpegExecutable $FFmpegPath
+$resolvedFFmpeg = if ($requestedFFmpeg) { $requestedFFmpeg } else { Resolve-FFmpegExecutable $FFmpegPath }
 & $resolvedFFmpeg -version | Select-Object -First 1 | Out-Host
 Assert-ExitCode "FFmpeg validation"
 
@@ -163,11 +192,19 @@ $versionModule = Join-Path $generatedDir "video_downloader_build_version.py"
 
 $env:VIDEO_DOWNLOADER_GENERATED_DIR = $generatedDir
 $env:VIDEO_DOWNLOADER_FFMPEG_PATH = $resolvedFFmpeg
-$ffmpegRoot = Split-Path (Split-Path $resolvedFFmpeg -Parent) -Parent
-$license = Get-ChildItem -LiteralPath $ffmpegRoot -Filter "LICENSE" -File -Recurse | Select-Object -First 1
-$readme = Get-ChildItem -LiteralPath $ffmpegRoot -Filter "README.txt" -File -Recurse | Select-Object -First 1
-if ($license) { $env:VIDEO_DOWNLOADER_FFMPEG_LICENSE = $license.FullName }
-if ($readme) { $env:VIDEO_DOWNLOADER_FFMPEG_README = $readme.FullName }
+$ffmpegDocs = @"
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(r'$PSScriptRoot').resolve()))
+from build_checks import find_optional_ffmpeg_document
+for name in ('LICENSE', 'README.txt'):
+    found = find_optional_ffmpeg_document(r'$resolvedFFmpeg', (name,))
+    print(f'{name}={found or ""}')
+"@
+foreach ($line in (python -c $ffmpegDocs)) {
+    if ($line -match '^LICENSE=(.+)$') { $env:VIDEO_DOWNLOADER_FFMPEG_LICENSE = $Matches[1] }
+    if ($line -match '^README\.txt=(.+)$') { $env:VIDEO_DOWNLOADER_FFMPEG_README = $Matches[1] }
+}
 
 Write-Host "Building one-folder artifact..."
 $env:VIDEO_DOWNLOADER_BUILD_MODE = "onedir"
@@ -197,6 +234,8 @@ $checksumLines = foreach ($artifact in @($zipPath, $oneFile)) {
     "$hash  $([System.IO.Path]::GetFileName($artifact))"
 }
 [System.IO.File]::WriteAllLines($checksumPath, $checksumLines, $utf8NoBom)
+python -c "from pathlib import Path; import sys; sys.path.insert(0, r'$PSScriptRoot'); from build_checks import parse_sha256_manifest; parse_sha256_manifest(Path(r'$checksumPath').read_text())"
+Assert-ExitCode "SHA256SUMS validation"
 
 Write-Host "Release artifacts:"
 Get-Item -LiteralPath $oneFolder, $zipPath, $oneFile, $checksumPath |

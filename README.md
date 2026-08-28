@@ -62,7 +62,7 @@ The CLI-only runtime remains available through `requirements.txt`; install
 
 Windows 10/11 x64 builds are distributed as a portable one-folder ZIP and a
 convenience EXE from GitHub Releases. Extract the ZIP to a writable location
-and launch `VideoDownloader.exe`; downloaded media and settings are kept
+and launch `VideoDownloader-windows-x64\VideoDownloader-windows-x64.exe`; downloaded media and settings are kept
 outside the installation directory. Initial unsigned builds may show a
 Microsoft SmartScreen warning; verify the release checksum before choosing
 **More info** and **Run anyway**.

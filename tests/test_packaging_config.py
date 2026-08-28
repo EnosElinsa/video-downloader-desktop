@@ -2,9 +2,19 @@
 
 from pathlib import Path
 import sys
+import zipfile
+import importlib.util
 
 
 ROOT = Path(__file__).parents[1]
+
+
+def _load_packaging_module(name: str, filename: str):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "packaging" / filename)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_spec_packages_the_desktop_entrypoint_as_a_windowed_app():
@@ -44,6 +54,8 @@ def test_build_script_has_stable_artifact_names_and_release_gates():
     assert "python -m pytest" in script
     assert script.count("python -m PyInstaller") == 2
     assert "Get-FileHash" in script
+    assert "build_checks.py" in script
+    assert "validate_release_environment" in script
 
 
 def test_build_script_verifies_downloaded_ffmpeg_before_packaging():
@@ -55,6 +67,70 @@ def test_build_script_verifies_downloaded_ffmpeg_before_packaging():
     assert "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec" in script
     assert "FFmpeg archive checksum mismatch" in script
     assert "ffmpeg.exe" in script
+    assert "find_optional_ffmpeg_document" in script
+    assert "-Recurse" not in script.split("$resolvedFFmpeg", 1)[-1].split("Write-Host \"Building", 1)[0]
+
+
+def test_release_environment_rejects_non_windows_or_non_x64_inputs():
+    """Catch a mislabeled ARM/32-bit/non-Windows release artifact."""
+    build_checks = _load_packaging_module("video_downloader_build_checks", "build_checks.py")
+
+    for kwargs in (
+        {"platform_name": "linux", "machine": "AMD64", "pointer_bits": 64},
+        {"platform_name": "win32", "machine": "AMD64", "pointer_bits": 32},
+        {"platform_name": "win32", "machine": "ARM64", "pointer_bits": 64},
+        {"platform_name": "win32", "machine": "AMD64", "pointer_bits": 64, "python_version": (3, 10)},
+    ):
+        try:
+            build_checks.validate_release_environment(**kwargs)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError(f"invalid environment accepted: {kwargs}")
+
+    build_checks.validate_release_environment(
+        platform_name="win32", machine="AMD64", pointer_bits=64,
+        python_version=(3, 13), pyinstaller_version="6.14.2"
+    )
+
+
+def test_smoke_test_returns_failure_for_nonzero_version_process(monkeypatch, tmp_path):
+    """Catch a smoke test that reports success when --version crashes."""
+    import subprocess
+    smoke_test = _load_packaging_module("video_downloader_smoke_test", "smoke_test.py")
+
+    executable = tmp_path / "VideoDownloader-windows-x64.exe"
+    executable.write_bytes(b"not a real executable")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 7, "", "boom"),
+    )
+
+    assert smoke_test.main(["--exe", str(executable)]) == 1
+
+
+def test_checksum_manifest_covers_zip_and_exe_with_sha256_values():
+    """Catch missing or malformed release checksum entries."""
+    build_checks = _load_packaging_module("video_downloader_build_checks", "build_checks.py")
+
+    manifest = "a" * 64 + "  VideoDownloader-windows-x64.zip\n" + "b" * 64 + "  VideoDownloader-windows-x64.exe\n"
+    assert build_checks.parse_sha256_manifest(manifest) == {
+        "VideoDownloader-windows-x64.zip": "a" * 64,
+        "VideoDownloader-windows-x64.exe": "b" * 64,
+    }
+
+
+def test_zip_contract_places_the_executable_under_the_shipped_folder_name():
+    """Catch documentation or ZIP layout pointing at a nonexistent executable."""
+    script = (ROOT / "packaging" / "build_windows.ps1").read_text(encoding="utf-8")
+    assert '"$artifactBase.exe"' in script
+    assert 'Join-Path $oneFolder "$artifactBase.exe"' in script
+
+    archive = ROOT / "dist" / "VideoDownloader-windows-x64.zip"
+    if archive.is_file():
+        with zipfile.ZipFile(archive) as zipped:
+            assert "VideoDownloader-windows-x64/VideoDownloader-windows-x64.exe" in zipped.namelist()
 
 
 def test_application_icon_is_a_real_windows_icon():

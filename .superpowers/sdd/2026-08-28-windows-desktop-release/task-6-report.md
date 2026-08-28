@@ -39,3 +39,12 @@ Command: `pwsh -NoProfile -File packaging/build_windows.ps1 -Version 0.1.0`
 - PyInstaller emitted non-fatal collection warnings for browser-only `urllib3.contrib.emscripten` (`js` is unavailable) and non-package `curl_cffi`/`yt_dlp_ejs` data collection. The Windows build completed and both frozen `--version` smoke tests passed.
 - Full Qt widget tests hang in this restricted headless host even with `QT_QPA_PLATFORM=offscreen`; the packaging test, all non-Qt tests, and the build's test gate were independently verified. CI should run the complete suite on a normal Windows runner.
 - Build outputs are intentionally ignored by `.gitignore`; no binary FFmpeg or credentials are committed.
+
+## Round 1 review fixes
+
+- Added `packaging/build_checks.py` architecture/toolchain validation. The PowerShell build now fails before cleanup unless running Windows x64 (`win32`, AMD64/x86_64, 64-bit Python), Python 3.11–3.13, and PyInstaller 6.14.2.
+- Corrected README ZIP instructions to launch the shipped inner path `VideoDownloader-windows-x64\\VideoDownloader-windows-x64.exe`.
+- Custom `-FFmpegPath` handling now resolves before build cleanup and optional license/README discovery only checks the executable directory plus an immediate `bin` parent; ACL errors or whole-drive recursion cannot abort the build.
+- Expanded packaging tests to 11 cases covering invalid architecture/toolchains, smoke failure, checksum parsing/coverage, ZIP executable layout, and the safe FFmpeg helper.
+
+Round 1 verification: focused packaging tests `11 passed`; rebuilt both artifacts with the pinned FFmpeg downloader and architecture guard; build gate `57 passed` (two pre-existing pytest cache permission warnings); both one-folder and one-file smoke tests returned `Video Downloader 0.1.0`; checksum manifest matched the rebuilt ZIP/EXE exactly. The custom-path staging fix was exercised by the build script's path resolution before cleanup (the source path may reside under `build`/`dist`).
