@@ -18,32 +18,29 @@ A powerful Python application that can download videos from almost any website.
 
 ### Quick Setup
 
-1. Make sure you have Python 3.6+ installed
-2. Run the setup script:
+1. Make sure you have Python 3.11 or newer installed.
+2. Install the desktop runtime dependencies:
 
 ```
-python setup.py
+python -m pip install -r requirements-desktop.txt
 ```
 
-The setup script will:
-- Install required dependencies
-- Create desktop shortcuts (Windows only)
-- Guide you through any additional setup steps
+The legacy `setup.py` script remains available for the original CLI/launcher
+workflow, but it is not required for the new desktop baseline.
 
 ### Manual Installation
 
 If you prefer manual installation:
 
-1. Install the required packages:
+1. Install the CLI packages (or use `requirements-desktop.txt` for the desktop
+   app):
 
 ```
 pip install yt-dlp>=2023.3.4 requests>=2.25.0
 ```
 
-2. For the GUI version, ensure tkinter is installed:
-   - **Windows**: Typically included with Python
-   - **Linux**: Install via package manager (e.g., `sudo apt-get install python3-tk`)
-   - **macOS**: Install via Homebrew (`brew install python-tk`)
+2. The new desktop app uses PySide6 and does not require tkinter. The legacy
+   `video_downloader_gui.py` launcher retains its tkinter dependency.
 
 ## Usage
 
@@ -130,7 +127,8 @@ If you encounter issues:
 3. **Rockstar page is unsupported**: The downloader recognizes current `/videos/<id>` pages and tries the public CDN variants (including the requested `resolution` query). If a variant is unavailable it falls back through lower resolutions.
 4. **Geo-restricted content**: Configure a proxy.
 5. **Dependencies issues**: Run `pip install -r requirements.txt`.
-6. **GUI not working**: Ensure tkinter is installed.
+6. **Legacy GUI not working**: Ensure tkinter is installed. The new PySide6
+   desktop app instead requires the packages in `requirements-desktop.txt`.
 
 The GUI always uses the automatic best-quality selector so downloads never wait
 for a terminal prompt. Use the CLI if you need to choose an individual format.
@@ -144,4 +142,5 @@ This software is open-source and free to use for personal purposes.
 Built with:
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - A powerful video downloader supporting many sites
 - [requests](https://requests.readthedocs.io/en/latest/) - For direct URL downloading
-- [tkinter](https://docs.python.org/3/library/tkinter.html) - For the GUI interface 
+- [PySide6](https://doc.qt.io/qtforpython-6/) - For the new desktop interface
+- [tkinter](https://docs.python.org/3/library/tkinter.html) - For the legacy GUI launcher

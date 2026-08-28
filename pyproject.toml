@@ -15,7 +15,8 @@ dependencies = [
 
 [project.scripts]
 video-downloader = "universal_video_downloader:main"
-video-downloader-gui = "desktop_app.main:main"
+# Task 5 will switch this launcher to desktop_app.main:main.
+video-downloader-gui = "video_downloader_gui:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
