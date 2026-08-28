@@ -32,7 +32,7 @@
 
 ## Round 2 fix
 - Settings Save now validates and persists before closing; failed writes keep the dialog open with an inline error. Regression coverage confirms an `OSError` remains visible to the user.
-- Code fix commit: pending final commit.
+- Code fix commit: `33790e42aae9447f1fc6e80ea44e69bf995b24d2`.
 
 ## Commit
 - `613c59afe8f812e9b36dde623d9b8c8d813b251f`
