@@ -99,6 +99,7 @@ def test_retry_failed_item_starts_a_fresh_download(qtbot, tmp_path):
     window.settings.proxy_url = "socks5://127.0.0.1:1080"
     window.settings.cookie_browser = "firefox"
     window.settings.format_selector = "best"
+    window.format_combo.setCurrentIndex(window.format_combo.findData("best"))
 
     window.retry_item(item_id)
 
@@ -109,6 +110,35 @@ def test_retry_failed_item_starts_a_fresh_download(qtbot, tmp_path):
     assert service.requests[1].proxy_url == "socks5://127.0.0.1:1080"
     assert service.requests[1].cookie_browser == "firefox"
     assert service.requests[1].format_selector == "best"
+
+
+def test_retry_uses_the_current_visible_format_selector(qtbot, tmp_path):
+    class RetryService:
+        def __init__(self):
+            self.requests = []
+
+        def download(self, request, emit, cancel=None):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                return DownloadResult(False, None, None, "download_failed", "network down")
+            return DownloadResult(True, "retried.mp4", "retried", None, None)
+
+    service = RetryService()
+    settings = AppSettings(output_dir=tmp_path, format_selector="best")
+    window = MainWindow(settings, service)
+    qtbot.addWidget(window)
+    window.show()
+    window.add_urls("https://example.test/a")
+    item_id = window.queue.snapshot()[0]["id"]
+    window.start_item(item_id)
+    qtbot.waitUntil(lambda: window.queue.snapshot()[0]["status"] == "failed")
+
+    window.format_combo.setCurrentIndex(window.format_combo.findData("bv*+ba/b"))
+    window.retry_item(item_id)
+
+    qtbot.waitUntil(lambda: window.queue.snapshot()[0]["status"] == "success")
+    assert service.requests[0].format_selector == "best"
+    assert service.requests[1].format_selector == "bv*+ba/b"
 
 
 def test_settings_dialog_saves_download_preferences_and_updates_window(qtbot, tmp_path, monkeypatch):

@@ -75,3 +75,21 @@ python -m pytest tests/test_entrypoints.py tests/test_settings_queue.py tests/te
 python -m pytest -q
 # 45 passed
 ```
+
+## Re-review fix round 3
+
+- Retry now takes the format selector from the currently visible format combo,
+  then synchronizes the in-memory settings value. A queued item can therefore
+  retry with the format the user currently selected rather than a stale saved
+  value.
+
+### Re-review verification
+
+With Qt offscreen, a workspace-local `TEMP`/`TMP`, and pytest cache disabled:
+
+```powershell
+python -m pytest tests/test_main_window.py -q
+# 11 passed
+python -m pytest -q
+# 46 passed
+```

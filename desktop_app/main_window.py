@@ -326,10 +326,12 @@ class MainWindow(QMainWindow):
         try: self.queue.retry(item_id)
         except ValueError: return
         previous_request = self.queue.get(item_id).request
+        format_selector = self.format_combo.currentData() or self.settings.format_selector
+        self.settings.format_selector = format_selector
         request = DownloadRequest(
             url=previous_request.url,
             output_dir=Path(self.settings.output_dir),
-            format_selector=self.settings.format_selector,
+            format_selector=format_selector,
             use_proxy=self.settings.use_proxy,
             proxy_url=self.settings.proxy_url,
             cookie_browser=self.settings.cookie_browser,
