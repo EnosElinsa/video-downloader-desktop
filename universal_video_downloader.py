@@ -567,7 +567,7 @@ def download_video(url, output_dir='.', use_proxy=False, proxy_url=None,
         for direct_url in rockstar_urls:
             logger.info(f'Trying Rockstar media URL: {direct_url}')
             if download_with_ytdlp(
-                direct_url, output_dir, use_proxy, proxy_url, False,
+                direct_url, output_dir, use_proxy, proxy_url, select_format,
                 cookie_browser, output_template
             ):
                 return DownloadResult(True, None, None, None, None)

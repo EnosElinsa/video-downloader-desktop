@@ -55,6 +55,14 @@ class DownloaderUrlTests(unittest.TestCase):
             "https://videos-rockstargames-com.akamaized.net/v4/rk721912/flv/en-us-2160p.mp4",
         )
 
+    @patch.object(downloader, "download_with_ytdlp", return_value=True)
+    def test_rockstar_download_preserves_interactive_format_selection(self, download_mock):
+        downloader.download_video(
+            "https://www.rockstargames.com/videos/rk721912", select_format=True
+        )
+
+        self.assertTrue(download_mock.call_args.args[4])
+
 
 class DownloaderOptionsTests(unittest.TestCase):
     def test_uses_modern_fallback_format_and_browser_cookies(self):
