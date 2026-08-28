@@ -73,8 +73,20 @@ def test_cancel_item_sets_cancelled_status(qtbot, tmp_path):
     assert window.queue.snapshot()[0]["status"] == "cancelled"
 
 
-def test_retry_failed_item_requeues_it(qtbot, tmp_path):
-    window = _window(qtbot, tmp_path, FailingService())
+def test_retry_failed_item_starts_a_fresh_download(qtbot, tmp_path):
+    class RetryService:
+        def __init__(self):
+            self.calls = 0
+
+        def download(self, request, emit, cancel=None):
+            self.calls += 1
+            if self.calls == 1:
+                emit(DownloadEvent("failed", message="network down", error_code="download_failed"))
+                return DownloadResult(False, None, None, "download_failed", "network down")
+            return DownloadResult(True, "retried.mp4", "retried", None, None)
+
+    service = RetryService()
+    window = _window(qtbot, tmp_path, service)
     window.add_urls("https://example.test/a")
     item_id = window.queue.snapshot()[0]["id"]
     window.start_item(item_id)
@@ -82,8 +94,54 @@ def test_retry_failed_item_requeues_it(qtbot, tmp_path):
 
     window.retry_item(item_id)
 
-    assert window.queue.snapshot()[0]["status"] == "queued"
-    assert window.queue.snapshot()[0]["error"] is None
+    qtbot.waitUntil(lambda: window.queue.snapshot()[0]["status"] == "success")
+    assert service.calls == 2
+
+
+def test_settings_dialog_saves_download_preferences_and_updates_window(qtbot, tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    window = _window(qtbot, tmp_path)
+    dialog = window._create_settings_dialog()
+    qtbot.addWidget(dialog)
+    selected_output = tmp_path / "chosen-output"
+
+    dialog.output_dir_edit.setText(str(selected_output))
+    dialog.proxy_enabled_checkbox.setChecked(True)
+    dialog.proxy_url_edit.setText("socks5://127.0.0.1:1080")
+    dialog.cookie_browser_combo.setCurrentText("Firefox")
+    dialog.concurrent_downloads_spin.setValue(3)
+    dialog.startup_behavior_combo.setCurrentText("Start minimized")
+    dialog.theme_combo.setCurrentText("Light")
+    dialog.accept()
+
+    assert window.settings.output_dir == selected_output
+    assert window.settings.use_proxy is True
+    assert window.settings.proxy_url == "socks5://127.0.0.1:1080"
+    assert window.settings.cookie_browser == "firefox"
+    assert window.settings.concurrent_downloads == 3
+    assert window.settings.startup_behavior == "minimized"
+    assert window.settings.theme == "light"
+    assert window.thread_pool.maxThreadCount() == 3
+    assert window.output_dir_edit.text() == str(selected_output)
+    assert window.theme_combo.currentText() == "Light"
+    saved = AppSettings.load()
+    assert saved.output_dir == selected_output
+    assert saved.proxy_url == "socks5://127.0.0.1:1080"
+
+
+def test_browse_output_directory_persists_selection(qtbot, tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    window = _window(qtbot, tmp_path)
+    selected_output = tmp_path / "selected"
+    monkeypatch.setattr(
+        "desktop_app.main_window.QFileDialog.getExistingDirectory",
+        lambda *_: str(selected_output),
+    )
+
+    window._choose_output_dir()
+
+    assert window.output_dir_edit.text() == str(selected_output)
+    assert AppSettings.load().output_dir == selected_output
 
 
 def test_worker_events_are_delivered_on_gui_thread(qtbot, tmp_path):

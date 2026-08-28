@@ -17,8 +17,14 @@ when you want the legacy terminal workflow and interactive format picker.
 
 Choose an output directory in the desktop window before adding downloads. Pick
 a folder you can write to, such as your Videos or Downloads folder, instead of
-the application installation directory. The app remembers this choice in your
-local Windows application settings.
+the application installation directory. Choosing a folder with **Browse**, or
+finishing an edit to the directory field, saves it immediately in local Windows
+application settings. Downloads already in the queue keep the output directory
+they had when added.
+
+Open **Settings** to change the output directory, proxy, cookie browser,
+concurrent-download limit, startup behavior, or light/dark theme. Selecting
+**Start minimized** makes the next launch open the app minimized.
 
 ## Cookies for sign-in, age checks, and private videos
 
@@ -42,8 +48,8 @@ the provider. Treat proxy URLs as private because they can contain credentials.
 
 Failed downloads remain in the queue. Read the activity log, correct the URL,
 network, cookie, or proxy problem, and choose **Retry** for that row. Retrying
-creates a fresh download attempt; it does not mark a download successful until
-the downloader itself has completed.
+immediately starts a fresh download attempt; it does not mark a download
+successful until the downloader itself has completed.
 
 The desktop app automatically selects the best compatible video and audio
 format. Run the CLI instead if you need to choose a specific format yourself.

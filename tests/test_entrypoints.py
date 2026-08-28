@@ -36,6 +36,19 @@ def test_legacy_gui_launcher_forwards_to_desktop_main(monkeypatch):
     assert legacy_gui.main is fake_main
 
 
+def test_legacy_gui_launcher_exits_with_desktop_main_result(monkeypatch):
+    """Catch a wrapper that imports the app but does not execute it as a script."""
+    desktop_main = importlib.import_module("desktop_app.main")
+    monkeypatch.setattr(desktop_main, "main", lambda: 17)
+
+    import runpy
+
+    with pytest.raises(SystemExit) as exit_result:
+        runpy.run_module("video_downloader_gui", run_name="__main__")
+
+    assert exit_result.value.code == 17
+
+
 def test_download_video_keeps_the_legacy_callable_parameters():
     """Catch accidental removal of CLI options consumed by existing callers."""
     from universal_video_downloader import download_video
@@ -56,3 +69,33 @@ def test_readme_uses_the_desktop_module_command():
     readme = (Path(__file__).parents[1] / "README.md").read_text(encoding="utf-8")
 
     assert "python -m desktop_app" in readme
+
+
+def test_installed_gui_entry_point_declares_pyside6_runtime_dependency():
+    """Catch a clean install that creates a GUI script without its Qt binding."""
+    import tomllib
+
+    metadata = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert any(dependency.lower().startswith("pyside6") for dependency in metadata["project"]["dependencies"])
+    assert metadata["project"]["scripts"]["video-downloader-gui"] == "desktop_app.main:main"
+
+
+def test_startup_behavior_opens_the_window_minimized_when_selected():
+    """Catch a persisted startup preference that has no effect at launch."""
+    from desktop_app.main import show_window
+
+    class FakeWindow:
+        def __init__(self):
+            self.visible = None
+
+        def show(self):
+            self.visible = "normal"
+
+        def showMinimized(self):
+            self.visible = "minimized"
+
+    window = FakeWindow()
+    show_window(window, "minimized")
+
+    assert window.visible == "minimized"

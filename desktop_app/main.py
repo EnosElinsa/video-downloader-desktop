@@ -9,11 +9,19 @@ from .main_window import MainWindow
 from .settings import AppSettings
 
 
+def show_window(window: MainWindow, startup_behavior: str) -> None:
+    """Show the main window using the locally saved startup preference."""
+    if startup_behavior == "minimized":
+        window.showMinimized()
+    else:
+        window.show()
+
+
 def main() -> int:
     app = QApplication.instance() or QApplication(sys.argv)
     settings = AppSettings.load()
     window = MainWindow(settings, DownloadService())
-    window.show()
+    show_window(window, settings.startup_behavior)
     return app.exec()
 
 
