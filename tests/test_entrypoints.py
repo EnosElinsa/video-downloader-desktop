@@ -55,8 +55,8 @@ def test_release_metadata_agrees_on_v010_and_does_not_claim_tkinter_or_unlicense
     setup = (root / "setup.py").read_text(encoding="utf-8").lower()
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8").lower()
 
-    assert 'version="0.1.1"' in setup
-    assert 'version = "0.1.1"' in pyproject
+    assert 'version="0.1.2"' in setup
+    assert 'version = "0.1.2"' in pyproject
     assert "tkinter" not in setup
     assert "always uses the automatic" not in readme
     assert "open-source and free" not in readme

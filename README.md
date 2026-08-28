@@ -71,7 +71,7 @@ Microsoft SmartScreen warning; verify the release checksum before choosing
 
 #### Building and publishing a release
 
-Push a semantic-version tag (for example, `v0.1.1`) to run the Windows release
+Push a semantic-version tag (for example, `v0.1.2`) to run the Windows release
 workflow. It installs Python 3.11 and the desktop/development requirements,
 runs the offscreen test suite, compiles the desktop package, executes packaged
 `--version` and offscreen GUI launch probes for both artifact forms, and attaches these files to the GitHub
@@ -89,7 +89,7 @@ provide a semantic version. To build locally on Windows, use PowerShell:
 ```
 python -m pip install -r requirements-desktop.txt
 python -m pip install -r requirements-dev.txt
-./packaging/build_windows.ps1 -Version 0.1.1
+./packaging/build_windows.ps1 -Version 0.1.2
 ```
 
 The normal release build ignores any `ffmpeg.exe` on `PATH` and downloads the

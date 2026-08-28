@@ -56,7 +56,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         setup(
             name="video_downloader",
-            version="0.1.1",
+            version="0.1.2",
             description="Universal Video Downloader",
             author="Video Downloader Team",
             packages=find_packages(),

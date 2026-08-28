@@ -37,7 +37,7 @@ class ProgressCell(QWidget):
         self.bar.setObjectName("downloadProgressBar")
         self.bar.setRange(0, 100)
         self.bar.setValue(0)
-        self.bar.setFormat("%p%")
+        self.bar.setTextVisible(False)
         self.bar.setAlignment(Qt.AlignCenter)
 
         layout = QHBoxLayout(self)
@@ -115,8 +115,9 @@ class DownloadCard(QFrame):
         progress_row.addWidget(self.progress, 1)
         self.detail_label = QLabel("0%", self)
         self.detail_label.setObjectName("cardMeta")
-        self.detail_label.setWordWrap(True)
-        self.detail_label.setMinimumWidth(90)
+        self.detail_label.setWordWrap(False)
+        self.detail_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.detail_label.setMinimumWidth(210)
         progress_row.addWidget(self.detail_label)
         root.addLayout(progress_row)
 
@@ -204,9 +205,11 @@ class DownloadCard(QFrame):
         if eta is not None:
             details.append(f"ETA {int(eta)}s")
         if status in {"failed", "cancelled"}:
+            self.detail_label.setWordWrap(True)
             self.detail_label.setText(guidance_for(error_code or status))
             self.detail_label.setToolTip(error or "")
         else:
+            self.detail_label.setWordWrap(False)
             self.detail_label.setText("  ·  ".join(details))
             self.detail_label.setToolTip("")
 

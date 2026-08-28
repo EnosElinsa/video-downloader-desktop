@@ -10,6 +10,8 @@ from PySide6.QtWidgets import QApplication
 from desktop_app.main_window import MainWindow
 from desktop_app.models import DownloadResult
 from desktop_app.settings import AppSettings
+from desktop_app.settings_dialog import SettingsDialog
+from desktop_app.theme import stylesheet
 
 OUT = ROOT / ".test-tmp" / "ui-redesign"
 
@@ -35,6 +37,30 @@ def make(mode, size, name, populated=False):
     window.grab().save(str(OUT / name))
     window.close(); window.deleteLater(); QApplication.processEvents()
 
+def make_compact_running(name, *, activity=False):
+    settings = AppSettings(output_dir=ROOT / ".test-tmp" / "videos", theme="dark")
+    window = MainWindow(settings, RenderService()); window.resize(1002, 691); window.show()
+    window.add_urls("https://www.rockstargames.com/videos/rk721912")
+    item_id = window.queue.snapshot()[0]["id"]
+    window.queue.update_status(item_id, "running", percent=8, speed=4_390_000, eta=522)
+    window._set_status(item_id, "running")
+    window._log("[download] 8.0% of 2.32GiB at 4.19MiB/s ETA 08:42")
+    if activity:
+        window.activity_toggle.click()
+    QApplication.processEvents()
+    OUT.mkdir(parents=True, exist_ok=True)
+    window.grab().save(str(OUT / name))
+    window.close(); window.deleteLater(); QApplication.processEvents()
+
+def make_settings():
+    settings = AppSettings(output_dir=ROOT / ".test-tmp" / "videos", theme="dark")
+    dialog = SettingsDialog(settings)
+    dialog.setStyleSheet(stylesheet("dark"))
+    dialog.show(); QApplication.processEvents()
+    OUT.mkdir(parents=True, exist_ok=True)
+    dialog.grab().save(str(OUT / "settings-dark.png"))
+    dialog.close(); dialog.deleteLater(); QApplication.processEvents()
+
 if __name__ == "__main__":
     app = QApplication.instance() or QApplication([])
     make("dark", (1366, 768), "empty-dark.png")
@@ -42,3 +68,6 @@ if __name__ == "__main__":
     make("light", (1180, 760), "populated-light.png", True)
     make("dark", (1067, 750), "empty-dark-1067x750.png")
     make("dark", (1067, 750), "populated-dark-1067x750.png", True)
+    make_compact_running("compact-running-dark-1002x691.png")
+    make_compact_running("compact-activity-dark-1002x691.png", activity=True)
+    make_settings()

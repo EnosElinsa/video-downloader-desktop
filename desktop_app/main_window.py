@@ -9,7 +9,6 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QUrl, Qt, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
     QFileDialog,
     QFrame,
@@ -21,10 +20,12 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
+from .controls import ChevronComboBox
 from .models import DownloadEvent, DownloadRequest, DownloadResult
 from .queue import DownloadQueue
 from .resources import resource_path
@@ -155,6 +156,7 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self):
         root = QWidget(self)
+        root.setObjectName("mainRoot")
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -186,8 +188,9 @@ class MainWindow(QMainWindow):
         header_layout.addLayout(brand)
         header_layout.addStretch()
 
-        self.theme_combo = QComboBox(header)
+        self.theme_combo = ChevronComboBox(header)
         self.theme_combo.setObjectName("themeToggle")
+        self.theme_combo.setMinimumWidth(92)
         self.theme_combo.addItem("Dark", "dark")
         self.theme_combo.addItem("Light", "light")
         self.theme_combo.setCurrentIndex(
@@ -205,6 +208,8 @@ class MainWindow(QMainWindow):
         outer.addWidget(header)
 
         content = QWidget(root)
+        content.setObjectName("contentRoot")
+        self.content_widget = content
         layout = QVBoxLayout(content)
         layout.setContentsMargins(32, 24, 32, 24)
         layout.setSpacing(14)
@@ -222,6 +227,7 @@ class MainWindow(QMainWindow):
 
         composer = QFrame(content)
         composer.setObjectName("composer")
+        self.composer = composer
         form = QGridLayout(composer)
         form.setContentsMargins(16, 14, 16, 16)
         form.setHorizontalSpacing(10)
@@ -254,7 +260,7 @@ class MainWindow(QMainWindow):
         quality_label = QLabel("Quality", composer)
         quality_label.setObjectName("muted")
         form.addWidget(quality_label, 3, 0)
-        self.format_combo = QComboBox(composer)
+        self.format_combo = ChevronComboBox(composer)
         self.format_combo.setObjectName("qualityCombo")
         self.format_combo.addItem("Automatic (best)", "bv*+ba/b")
         self.format_combo.addItem("Best single file", "best")
@@ -273,6 +279,8 @@ class MainWindow(QMainWindow):
             lambda: self.add_urls(self.url_input.toPlainText())
         )
         form.addWidget(self.add_button, 3, 2)
+        composer.setMinimumHeight(composer.minimumSizeHint().height())
+        composer.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout.addWidget(composer)
 
         queue_heading = QHBoxLayout()
@@ -292,6 +300,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(scroll, 1)
 
         self.empty_state = QWidget(self.queue_list)
+        self.empty_state.setObjectName("emptyState")
         empty_layout = QVBoxLayout(self.empty_state)
         empty_layout.setContentsMargins(16, 44, 16, 44)
         empty_layout.setAlignment(Qt.AlignCenter)
@@ -334,8 +343,9 @@ class MainWindow(QMainWindow):
         self.activity_log.setObjectName("activityLog")
         self.activity_log.setFixedHeight(100)
         drawer_layout.addWidget(self.activity_log)
+        self.activity_drawer.setFixedHeight(176)
         self.activity_drawer.setVisible(False)
-        layout.addWidget(self.activity_drawer)
+        self._position_activity_drawer()
 
     def apply_theme(self, mode):
         mode = mode if mode in ("dark", "light") else "dark"
@@ -344,8 +354,26 @@ class MainWindow(QMainWindow):
 
     def _toggle_activity(self):
         visible = not self.activity_drawer.isVisible()
+        if visible:
+            self._position_activity_drawer()
         self.activity_drawer.setVisible(visible)
+        if visible:
+            self.activity_drawer.raise_()
         self.activity_toggle.setText("Hide activity" if visible else "View activity")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._position_activity_drawer()
+
+    def _position_activity_drawer(self):
+        if not hasattr(self, "activity_drawer") or not hasattr(self, "content_widget"):
+            return
+        margin = 32
+        height = self.activity_drawer.height() or 176
+        toggle_top = self.activity_toggle.geometry().top() if hasattr(self, "activity_toggle") else self.content_widget.height()
+        y = max(12, toggle_top - height - 8)
+        width = max(320, self.content_widget.width() - margin * 2)
+        self.activity_drawer.setGeometry(margin, y, width, height)
 
     @Slot(str)
     def add_urls(self, text):
