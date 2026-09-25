@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from .controls import ChevronComboBox
+from .download_core import dependency_summary
 from .models import DownloadEvent, DownloadRequest, DownloadResult
 from .queue import DownloadQueue
 from .resources import resource_path
@@ -188,19 +189,6 @@ class MainWindow(QMainWindow):
         header_layout.addLayout(brand)
         header_layout.addStretch()
 
-        self.theme_combo = ChevronComboBox(header)
-        self.theme_combo.setObjectName("themeToggle")
-        self.theme_combo.setMinimumWidth(92)
-        self.theme_combo.addItem("Dark", "dark")
-        self.theme_combo.addItem("Light", "light")
-        self.theme_combo.setCurrentIndex(
-            max(0, self.theme_combo.findData(self.settings.theme))
-        )
-        self.theme_combo.currentIndexChanged.connect(
-            lambda _: self.apply_theme(self.theme_combo.currentData())
-        )
-        header_layout.addWidget(self.theme_combo)
-
         self.settings_button = QPushButton("Settings", header)
         self.settings_button.setObjectName("settingsButton")
         self.settings_button.clicked.connect(self._show_settings)
@@ -215,16 +203,6 @@ class MainWindow(QMainWindow):
         layout.setSpacing(14)
         outer.addWidget(content, 1)
 
-        heading = QLabel("Download videos", content)
-        heading.setObjectName("pageTitle")
-        layout.addWidget(heading)
-        subtitle = QLabel(
-            "Paste one or more links, choose a quality, and add them to your queue.",
-            content,
-        )
-        subtitle.setObjectName("muted")
-        layout.addWidget(subtitle)
-
         composer = QFrame(content)
         composer.setObjectName("composer")
         self.composer = composer
@@ -233,9 +211,6 @@ class MainWindow(QMainWindow):
         form.setHorizontalSpacing(10)
         form.setVerticalSpacing(8)
 
-        label = QLabel("Video URLs", composer)
-        label.setObjectName("sectionTitle")
-        form.addWidget(label, 0, 0, 1, 3)
         self.url_input = UrlInput(composer)
         self.url_input.setObjectName("urlInput")
         self.url_input.setAccessibleName("Video URLs")
@@ -244,41 +219,33 @@ class MainWindow(QMainWindow):
         self.url_input.submit_requested.connect(
             lambda: self.add_urls(self.url_input.toPlainText())
         )
-        form.addWidget(self.url_input, 1, 0, 1, 3)
+        form.addWidget(self.url_input, 0, 0, 1, 4)
 
-        output_label = QLabel("Output folder", composer)
-        output_label.setObjectName("muted")
-        form.addWidget(output_label, 2, 0)
         self.output_dir_edit = QLineEdit(str(self.settings.output_dir), composer)
         self.output_dir_edit.setObjectName("outputDirectory")
+        self.output_dir_edit.setAccessibleName("Output folder")
         self.output_dir_edit.editingFinished.connect(self._persist_output_dir)
-        form.addWidget(self.output_dir_edit, 2, 1)
+        form.addWidget(self.output_dir_edit, 1, 0)
         browse = QPushButton("Browse", composer)
         browse.clicked.connect(self._choose_output_dir)
-        form.addWidget(browse, 2, 2)
-
-        quality_label = QLabel("Quality", composer)
-        quality_label.setObjectName("muted")
-        form.addWidget(quality_label, 3, 0)
+        form.addWidget(browse, 1, 1)
         self.format_combo = ChevronComboBox(composer)
         self.format_combo.setObjectName("qualityCombo")
+        self.format_combo.setAccessibleName("Quality")
         self.format_combo.addItem("Automatic (best)", "bv*+ba/b")
         self.format_combo.addItem("Best single file", "best")
         format_index = self.format_combo.findData(
             getattr(self.settings, "format_selector", "bv*+ba/b")
         )
         self.format_combo.setCurrentIndex(format_index if format_index >= 0 else 0)
-        form.addWidget(self.format_combo, 3, 1)
+        form.addWidget(self.format_combo, 1, 2)
         self.add_button = QPushButton("Add to queue", composer)
         self.add_button.setObjectName("addToQueueButton")
         self.add_button.setAccessibleName("Add to queue")
-        self.add_button.setIcon(
-            self.style().standardIcon(self.style().StandardPixmap.SP_MediaPlay)
-        )
         self.add_button.clicked.connect(
             lambda: self.add_urls(self.url_input.toPlainText())
         )
-        form.addWidget(self.add_button, 3, 2)
+        form.addWidget(self.add_button, 1, 3)
         composer.setMinimumHeight(composer.minimumSizeHint().height())
         composer.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout.addWidget(composer)
@@ -304,10 +271,10 @@ class MainWindow(QMainWindow):
         empty_layout = QVBoxLayout(self.empty_state)
         empty_layout.setContentsMargins(16, 44, 16, 44)
         empty_layout.setAlignment(Qt.AlignCenter)
-        empty_title = QLabel("No downloads yet", self.empty_state)
+        empty_title = QLabel("Nothing queued", self.empty_state)
         empty_title.setFont(app_font(14, 600))
         empty_title.setAlignment(Qt.AlignCenter)
-        empty_line = QLabel("Your queued videos will appear here.", self.empty_state)
+        empty_line = QLabel("Paste a link above, then add it to the queue.", self.empty_state)
         empty_line.setObjectName("muted")
         empty_line.setAlignment(Qt.AlignCenter)
         empty_layout.addWidget(empty_title)
@@ -343,9 +310,9 @@ class MainWindow(QMainWindow):
         self.activity_log.setObjectName("activityLog")
         self.activity_log.setFixedHeight(100)
         drawer_layout.addWidget(self.activity_log)
-        self.activity_drawer.setFixedHeight(176)
         self.activity_drawer.setVisible(False)
-        self._position_activity_drawer()
+        layout.addWidget(self.activity_drawer)
+        self._update_header()
 
     def apply_theme(self, mode):
         mode = mode if mode in ("dark", "light") else "dark"
@@ -354,26 +321,8 @@ class MainWindow(QMainWindow):
 
     def _toggle_activity(self):
         visible = not self.activity_drawer.isVisible()
-        if visible:
-            self._position_activity_drawer()
         self.activity_drawer.setVisible(visible)
-        if visible:
-            self.activity_drawer.raise_()
         self.activity_toggle.setText("Hide activity" if visible else "View activity")
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._position_activity_drawer()
-
-    def _position_activity_drawer(self):
-        if not hasattr(self, "activity_drawer") or not hasattr(self, "content_widget"):
-            return
-        margin = 32
-        height = self.activity_drawer.height() or 176
-        toggle_top = self.activity_toggle.geometry().top() if hasattr(self, "activity_toggle") else self.content_widget.height()
-        y = max(12, toggle_top - height - 8)
-        width = max(320, self.content_widget.width() - margin * 2)
-        self.activity_drawer.setGeometry(margin, y, width, height)
 
     @Slot(str)
     def add_urls(self, text):
@@ -639,9 +588,11 @@ class MainWindow(QMainWindow):
         snapshot = self.queue.snapshot()
         running = sum(1 for item in snapshot if item["status"] == "running")
         total = len(snapshot)
-        self.header_status.setText(
-            f"{running} active  ·  {total} queued" if total else "Ready"
-        )
+        deps = dependency_summary(getattr(self.settings, "cookie_browser", None))
+        if total:
+            self.header_status.setText(f"{deps}  ·  {running} active  ·  {total} in queue")
+        else:
+            self.header_status.setText(deps)
 
     def _persist_output_dir(self):
         selected = self.output_dir_edit.text().strip()
@@ -721,11 +672,7 @@ class MainWindow(QMainWindow):
             )
         self.thread_pool.setMaxThreadCount(self.settings.concurrent_downloads)
         self.output_dir_edit.setText(str(self.settings.output_dir))
-        self.theme_combo.blockSignals(True)
-        self.theme_combo.setCurrentIndex(
-            max(0, self.theme_combo.findData(self.settings.theme))
-        )
-        self.theme_combo.blockSignals(False)
         self.apply_theme(self.settings.theme)
+        self._update_header()
         dialog.done(QDialog.Accepted)
         return True

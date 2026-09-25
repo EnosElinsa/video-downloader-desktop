@@ -20,7 +20,7 @@ Public repository: [EnosElinsa/video-downloader-desktop](https://github.com/Enos
 
 ### Quick Setup
 
-1. Make sure you have Python 3.11 or newer installed.
+1. Make sure you have Python 3.11–3.13 for a release build, or Python 3.14 for local development. Desktop UI packages need PySide6 6.10.1 or newer on Python 3.14.
 2. Install the desktop runtime dependencies:
 
 ```
@@ -47,7 +47,7 @@ pip install yt-dlp>=2023.3.4 requests>=2.25.0
 
 ### Local development
 
-The desktop application targets Python 3.11 or newer. Create an isolated
+The desktop application targets Python 3.11–3.13 for release builds. Python 3.14 can run it locally with PySide6 6.10.1 or newer. Create an isolated
 environment and install the development dependencies:
 
 ```

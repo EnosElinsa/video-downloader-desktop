@@ -6,10 +6,14 @@ from __future__ import annotations
 ERROR_GUIDANCE = {
     "invalid_url": "Check the link and enter a valid HTTP(S) URL.",
     "format_unavailable": "Choose Automatic quality and retry.",
-    "auth_required": "Select browser cookies in Settings, then retry.",
+    "auth_required": "Choose Firefox under Browser cookies in Settings, then retry while signed in.",
+    "cookie_database_locked": "Close that browser completely, or choose Firefox in Settings, then retry.",
+    "cookie_decrypt_failed": "Chromium cookies cannot be decrypted on Windows. Choose Firefox in Settings, then retry.",
+    "js_runtime_missing": "Install Deno, restart the app, then retry.",
+    "challenge_solver_missing": "The YouTube challenge solver did not run. Check the network, then retry.",
     "network_error": "Check your internet connection and retry.",
     "proxy_error": "Check the proxy settings or turn the proxy off.",
-    "ffmpeg_missing": "Reinstall the app to restore the bundled FFmpeg tools.",
+    "ffmpeg_missing": "Install FFmpeg and restart the app, or reinstall the packaged app.",
     "unsupported_site": "This site is unsupported; try a direct media link.",
     "cancelled": "Download cancelled.",
     "download_failed": "Retry, or open Activity for technical details.",
@@ -33,6 +37,34 @@ def classify_error(error: object | None) -> str:
         )
     ):
         return "format_unavailable"
+
+    if "could not copy chrome cookie database" in message or (
+        "could not copy" in message and "cookie" in message
+    ):
+        return "cookie_database_locked"
+
+    if "failed to decrypt with dpapi" in message or "app-bound encryption" in message:
+        return "cookie_decrypt_failed"
+
+    if any(
+        phrase in message
+        for phrase in (
+            "no supported javascript runtime",
+            "only deno is enabled",
+            "js-runtimes",
+        )
+    ):
+        return "js_runtime_missing"
+
+    if any(
+        phrase in message
+        for phrase in (
+            "n challenge solving failed",
+            "challenge solver",
+            "the page needs to be reloaded",
+        )
+    ):
+        return "challenge_solver_missing"
 
     if error_name in {"proxyerror", "proxyexception"} or any(
         phrase in message

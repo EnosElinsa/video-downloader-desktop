@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import sys
 from collections.abc import Callable
 from uuid import uuid4
@@ -22,6 +23,16 @@ DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
 )
+
+
+def detected_js_runtimes() -> dict[str, dict[str, str]]:
+    """Enable Deno and Node when they are installed. yt-dlp only enables Deno by default."""
+    found: dict[str, dict[str, str]] = {}
+    for name in ("deno", "node"):
+        path = shutil.which(name)
+        if path:
+            found[name] = {"path": path}
+    return found
 
 
 def default_output_template(output_dir: str | os.PathLike[str] = ".") -> str:
@@ -59,7 +70,12 @@ def build_ytdlp_options(
             "Referer": url,
         },
         "merge_output_format": "mp4",
+        # Fetch the official YouTube n-challenge solver when it is not installed locally.
+        "remote_components": ["ejs:github"],
     }
+    runtimes = detected_js_runtimes()
+    if runtimes:
+        options["js_runtimes"] = runtimes
     if use_proxy and proxy_url:
         options["proxy"] = proxy_url
     if cookie_browser and str(cookie_browser).strip():
@@ -258,6 +274,7 @@ __all__ = [
     "build_ytdlp_options",
     "choose_format_for_context",
     "default_output_template",
+    "detected_js_runtimes",
     "download_with_ytdlp",
     "format_duration",
     "format_size",

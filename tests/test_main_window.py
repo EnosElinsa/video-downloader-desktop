@@ -186,7 +186,7 @@ def test_settings_dialog_saves_download_preferences_and_updates_window(qtbot, tm
     assert window.settings.theme == "light"
     assert window.thread_pool.maxThreadCount() == 3
     assert window.output_dir_edit.text() == str(selected_output)
-    assert window.theme_combo.currentText() == "Light"
+    assert "background:#F7F9FC" in window.styleSheet() or "background: #F7F9FC" in window.styleSheet()
     saved = AppSettings.load()
     assert saved.output_dir == selected_output
     assert saved.proxy_url == "socks5://127.0.0.1:1080"

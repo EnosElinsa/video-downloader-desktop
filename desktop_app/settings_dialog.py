@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -110,6 +111,8 @@ class SettingsDialog(QDialog):
         self.proxy_url_edit.setEnabled(self.proxy_enabled_checkbox.isChecked())
         network.addRow("Proxy address", self.proxy_url_edit)
         self._configure_form_label(network, self.proxy_url_edit)
+        self.proxy_enabled_checkbox.toggled.connect(self._sync_proxy_address)
+        self._sync_proxy_address(self.proxy_enabled_checkbox.isChecked())
 
         self.cookie_browser_combo = ChevronComboBox(self)
         self.cookie_browser_combo.setObjectName("browserCookies")
@@ -129,6 +132,14 @@ class SettingsDialog(QDialog):
         )
         network.addRow("Browser cookies", self.cookie_browser_combo)
         self._configure_form_label(network, self.cookie_browser_combo)
+        self.cookie_hint = QLabel(self)
+        self.cookie_hint.setObjectName("cookieHint")
+        self.cookie_hint.setWordWrap(True)
+        self.cookie_browser_combo.currentIndexChanged.connect(
+            lambda _index: self._update_cookie_hint()
+        )
+        self._update_cookie_hint()
+        network.addRow("", self.cookie_hint)
         root.addWidget(self.network_group)
 
         self.error_label = QLabel(self)
@@ -170,6 +181,30 @@ class SettingsDialog(QDialog):
             label.setMinimumWidth(150)
             label.setWordWrap(False)
             label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+    def _sync_proxy_address(self, enabled: bool) -> None:
+        self.proxy_url_edit.setVisible(enabled)
+        form = self.network_group.layout()
+        if isinstance(form, QFormLayout):
+            field_label = form.labelForField(self.proxy_url_edit)
+            if field_label is not None:
+                field_label.setVisible(enabled)
+
+    def _update_cookie_hint(self) -> None:
+        browser = self.cookie_browser_combo.currentData()
+        chromium = {"chrome", "edge", "brave", "opera", "chromium"}
+        if browser == "firefox":
+            text = "Firefox can be read while you are signed in. Leave Firefox installed."
+        elif browser in chromium and sys.platform == "win32":
+            text = (
+                "On Windows this browser encrypts cookies, so the app usually cannot read them. "
+                "Use Firefox."
+            )
+        elif not browser:
+            text = "No browser cookies. YouTube may ask you to sign in."
+        else:
+            text = "Use the browser where you are already signed in."
+        self.cookie_hint.setText(text)
 
     def _choose_output_dir(self):
         chosen = QFileDialog.getExistingDirectory(

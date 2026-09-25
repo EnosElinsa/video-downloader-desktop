@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import inspect
+import shutil
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -21,16 +22,50 @@ from .urls import normalize_http_url
 
 
 def bundled_ffmpeg_path() -> str | None:
-    """Return the packaged FFmpeg executable without consulting global PATH."""
-    if not getattr(sys, "frozen", False):
+    """Return bundled FFmpeg when packaged, otherwise the FFmpeg on PATH."""
+    if getattr(sys, "frozen", False):
+        roots = [Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)), Path(sys.executable).parent]
+        for root in roots:
+            candidate = root / "ffmpeg.exe"
+            if candidate.is_file():
+                return str(candidate)
         return None
+    return shutil.which("ffmpeg")
 
-    roots = [Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)), Path(sys.executable).parent]
-    for root in roots:
-        candidate = root / "ffmpeg.exe"
-        if candidate.is_file():
-            return str(candidate)
-    return None
+
+def format_needs_ffmpeg(selector: str | None) -> bool:
+    """Separate video and audio streams have to be merged."""
+    value = (selector or "").strip().lower()
+    if value in {"best", "b", "bestaudio", "worstaudio", "worst"}:
+        return False
+    return "+" in value or value.startswith("bv")
+
+
+_CHROMIUM_BROWSERS = {"chrome", "edge", "brave", "opera", "chromium"}
+
+
+def dependency_summary(cookie_browser: str | None = None) -> str:
+    """One-line readiness for FFmpeg, a JS runtime, and the selected browser."""
+    parts = ["FFmpeg ready" if bundled_ffmpeg_path() else "FFmpeg missing"]
+    from .yt_dlp_adapter import detected_js_runtimes
+
+    runtimes = detected_js_runtimes()
+    if "deno" in runtimes:
+        parts.append("Deno ready")
+    elif "node" in runtimes:
+        parts.append("Node ready")
+    else:
+        parts.append("JS runtime missing")
+    browser = (cookie_browser or "").strip().lower()
+    if not browser:
+        parts.append("No browser cookies")
+    elif browser == "firefox":
+        parts.append("Firefox cookies")
+    elif browser in _CHROMIUM_BROWSERS:
+        parts.append(f"{browser.title()} cookies may be unreadable")
+    else:
+        parts.append(f"{browser} cookies")
+    return "  ·  ".join(parts)
 
 
 class YtdlpBackend(Protocol):
@@ -70,6 +105,8 @@ class _DefaultYtdlpBackend:
     def extract_info(self, url, options):
         import yt_dlp
 
+        if format_needs_ffmpeg(options.get("format")) and not options.get("ffmpeg_location"):
+            raise RuntimeError("ffmpeg is not installed")
         with yt_dlp.YoutubeDL(options) as ydl:
             return ydl.extract_info(url, download=False)
 
@@ -102,7 +139,10 @@ class _YtdlpEventLogger:
         self._log(message)
 
     def error(self, message):
-        self._log(message)
+        text = str(message).strip()
+        while text.lower().startswith("error:"):
+            text = text.split(":", 1)[1].strip()
+        self._log(f"ERROR: {text}" if text else "ERROR")
 
     def _log(self, message):
         self._emit(DownloadEvent("log", message=self._sanitize(message)))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -19,14 +20,73 @@ from .security import sanitize_message
 from .urls import normalized_hostname
 
 
-def _icon_button(widget: QWidget, icon, tooltip: str) -> QPushButton:
-    button = QPushButton(widget)
-    button.setObjectName("iconButton")
-    button.setIcon(icon)
-    button.setToolTip(tooltip)
-    button.setAccessibleName(tooltip)
-    button.setFocusPolicy(Qt.StrongFocus)
-    return button
+_SITE_COLORS = ("#7C5CFC", "#3D8BFD", "#39C887", "#F3B95F", "#F06A75", "#4CC2C9")
+
+
+def _site_color(site: str) -> str:
+    return _SITE_COLORS[sum(ord(char) for char in site) % len(_SITE_COLORS)]
+
+
+def _draw_glyph(painter: QPainter, kind: str, rect, color: QColor) -> None:
+    from PySide6.QtCore import QPointF
+    from PySide6.QtGui import QPolygonF
+
+    painter.save()
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    pen = QPen(color)
+    pen.setWidthF(1.4)
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+    cx = rect.center().x()
+    cy = rect.center().y()
+    if kind == "play":
+        painter.setBrush(color)
+        painter.setPen(Qt.NoPen)
+        painter.drawPolygon(
+            QPolygonF(
+                [
+                    QPointF(cx - 4, cy - 5),
+                    QPointF(cx - 4, cy + 5),
+                    QPointF(cx + 5, cy),
+                ]
+            )
+        )
+    elif kind == "retry":
+        painter.drawArc(int(cx - 5), int(cy - 5), 10, 10, 40 * 16, 280 * 16)
+        painter.drawLine(int(cx + 4), int(cy - 5), int(cx + 1), int(cy - 2))
+        painter.drawLine(int(cx + 4), int(cy - 5), int(cx + 4), int(cy - 1))
+    elif kind == "cancel":
+        painter.drawLine(int(cx - 4), int(cy - 4), int(cx + 4), int(cy + 4))
+        painter.drawLine(int(cx + 4), int(cy - 4), int(cx - 4), int(cy + 4))
+    elif kind == "open":
+        painter.drawRect(int(cx - 6), int(cy - 2), 12, 8)
+        painter.drawLine(int(cx - 6), int(cy - 2), int(cx - 2), int(cy - 6))
+        painter.drawLine(int(cx - 2), int(cy - 6), int(cx + 2), int(cy - 6))
+        painter.drawLine(int(cx + 2), int(cy - 6), int(cx + 2), int(cy - 2))
+    elif kind == "remove":
+        painter.drawLine(int(cx - 5), int(cy - 3), int(cx + 5), int(cy - 3))
+        painter.drawRect(int(cx - 3), int(cy - 2), 6, 8)
+        painter.drawLine(int(cx - 2), int(cy - 5), int(cx + 2), int(cy - 5))
+    painter.restore()
+
+
+class GlyphButton(QPushButton):
+    def __init__(self, kind: str, tooltip: str, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.kind = kind
+        self.setObjectName("iconButton")
+        self.setToolTip(tooltip)
+        self.setAccessibleName(tooltip)
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setFixedSize(32, 32)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        painter = QPainter(self)
+        color = self.palette().color(self.foregroundRole())
+        _draw_glyph(painter, self.kind, self.rect(), color)
 
 
 class ProgressCell(QWidget):
@@ -82,13 +142,13 @@ class DownloadCard(QFrame):
 
         top = QHBoxLayout()
         top.setSpacing(10)
-        avatar = QLabel(self._site[:1].upper())
-        avatar.setFixedSize(30, 30)
-        avatar.setAlignment(Qt.AlignCenter)
-        avatar.setStyleSheet(
-            "border-radius:15px; background:#7C5CFC; color:white; font-weight:700;"
+        dot = QLabel(self)
+        dot.setObjectName("siteDot")
+        dot.setFixedSize(8, 8)
+        dot.setStyleSheet(
+            f"background:{_site_color(self._site)}; border-radius:4px;"
         )
-        top.addWidget(avatar)
+        top.addWidget(dot, 0, Qt.AlignVCenter)
 
         info = QVBoxLayout()
         info.setSpacing(1)
@@ -114,7 +174,7 @@ class DownloadCard(QFrame):
         self.progress = ProgressCell(self)
         progress_row.addWidget(self.progress, 1)
         self.detail_label = QLabel("0%", self)
-        self.detail_label.setObjectName("cardMeta")
+        self.detail_label.setObjectName("cardDetail")
         self.detail_label.setWordWrap(False)
         self.detail_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.detail_label.setMinimumWidth(210)
@@ -124,30 +184,11 @@ class DownloadCard(QFrame):
         actions = QHBoxLayout()
         actions.setSpacing(4)
         actions.addStretch()
-        style = self.style()
-        self.start_button = _icon_button(
-            self, style.standardIcon(style.StandardPixmap.SP_MediaPlay), "Start download"
-        )
-        self.retry_button = _icon_button(
-            self,
-            style.standardIcon(style.StandardPixmap.SP_BrowserReload),
-            "Retry download",
-        )
-        self.cancel_button = _icon_button(
-            self,
-            style.standardIcon(style.StandardPixmap.SP_DialogCancelButton),
-            "Cancel download",
-        )
-        self.open_button = _icon_button(
-            self,
-            style.standardIcon(style.StandardPixmap.SP_DirOpenIcon),
-            "Open output folder",
-        )
-        self.remove_button = _icon_button(
-            self,
-            style.standardIcon(style.StandardPixmap.SP_TrashIcon),
-            "Remove download",
-        )
+        self.start_button = GlyphButton("play", "Start download", self)
+        self.retry_button = GlyphButton("retry", "Retry download", self)
+        self.cancel_button = GlyphButton("cancel", "Cancel download", self)
+        self.open_button = GlyphButton("open", "Open output folder", self)
+        self.remove_button = GlyphButton("remove", "Remove download", self)
         for button, action in (
             (self.start_button, "start"),
             (self.retry_button, "retry"),
@@ -206,8 +247,9 @@ class DownloadCard(QFrame):
             details.append(f"ETA {int(eta)}s")
         if status in {"failed", "cancelled"}:
             self.detail_label.setWordWrap(True)
-            self.detail_label.setText(guidance_for(error_code or status))
-            self.detail_label.setToolTip(error or "")
+            guidance = guidance_for(error_code or status)
+            self.detail_label.setText(guidance)
+            self.detail_label.setToolTip(error or guidance)
         else:
             self.detail_label.setWordWrap(False)
             self.detail_label.setText("  ·  ".join(details))

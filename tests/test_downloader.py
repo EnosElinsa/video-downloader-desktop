@@ -88,6 +88,19 @@ class DownloaderOptionsTests(unittest.TestCase):
         self.assertEqual(options["format"], "bv*+ba/b")
         self.assertEqual(options["cookiesfrombrowser"], ("chrome",))
         self.assertEqual(options["noplaylist"], True)
+        self.assertEqual(options["remote_components"], ["ejs:github"])
+
+    def test_enables_node_when_deno_is_absent(self):
+        from desktop_app import yt_dlp_adapter
+
+        with patch.object(
+            yt_dlp_adapter.shutil,
+            "which",
+            lambda name: r"C:\node\node.exe" if name == "node" else None,
+        ):
+            options = downloader.build_ytdlp_options("https://www.youtube.com/watch?v=demo")
+
+        self.assertEqual(options["js_runtimes"], {"node": {"path": r"C:\node\node.exe"}})
 
     def test_non_interactive_format_selection_does_not_read_stdin(self):
         with patch.object(downloader.sys.stdin, "isatty", return_value=False):

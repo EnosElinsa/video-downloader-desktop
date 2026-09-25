@@ -50,7 +50,6 @@ def test_comboboxes_and_spinbox_use_deterministic_painted_arrows(qtbot, tmp_path
     dialog.show()
     QApplication.processEvents()
 
-    assert isinstance(window.theme_combo, ChevronComboBox)
     assert isinstance(window.format_combo, ChevronComboBox)
     assert isinstance(dialog.startup_behavior_combo, ChevronComboBox)
     assert isinstance(dialog.theme_combo, ChevronComboBox)
@@ -116,7 +115,11 @@ def test_settings_dialog_has_production_minimum_and_unclipped_form_labels(qtbot,
         }
     }
     assert len(labels) == 7
-    assert all(label.width() >= label.sizeHint().width() for label in labels.values())
+    assert all(
+        label.width() >= label.sizeHint().width()
+        for label in labels.values()
+        if label.isVisible()
+    )
     assert dialog.save_button.isVisible()
     assert dialog.cancel_button.isVisible()
     assert dialog.network_group.title() == "Network && access"

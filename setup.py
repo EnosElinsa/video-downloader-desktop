@@ -12,7 +12,7 @@ def install_dependencies():
     try:
         # Install required packages
         subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "PySide6==6.8.2.1",
+            sys.executable, "-m", "pip", "install", "PySide6>=6.10.1,<6.12",
             "yt-dlp>=2023.3.4", "requests>=2.25.0",
         ])
         print("Dependencies installed successfully.")
@@ -56,12 +56,12 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         setup(
             name="video_downloader",
-            version="0.1.2",
+            version="0.1.3",
             description="Universal Video Downloader",
             author="Video Downloader Team",
             packages=find_packages(),
             install_requires=[
-                "PySide6==6.8.2.1",
+                "PySide6>=6.10.1,<6.12",
                 "yt-dlp>=2023.3.4",
                 "requests>=2.25.0",
             ],

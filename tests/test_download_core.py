@@ -267,6 +267,11 @@ def test_format_retry_reuses_one_request_template(tmp_path):
     [
         ("Requested format is not available", "format_unavailable"),
         ("Sign in to confirm; login required", "auth_required"),
+        ("Could not copy Chrome cookie database", "cookie_database_locked"),
+        ("Failed to decrypt with DPAPI", "cookie_decrypt_failed"),
+        ("No supported JavaScript runtime could be found", "js_runtime_missing"),
+        ("n challenge solving failed", "challenge_solver_missing"),
+        ("[youtube] The page needs to be reloaded", "challenge_solver_missing"),
         ("Temporary failure in name resolution", "network_error"),
         ("ProxyError: 407 Proxy Authentication Required", "proxy_error"),
         ("ffmpeg not found. Please install ffmpeg", "ffmpeg_missing"),
@@ -385,3 +390,29 @@ def test_service_owns_rockstar_candidate_orchestration(tmp_path):
     assert backend.urls == [
         "https://videos-rockstargames-com.akamaized.net/v4/rk721912/flv/en-us-2160p.mp4"
     ]
+
+
+def test_ytdlp_logger_collapses_repeated_error_prefixes():
+    from desktop_app.download_core import _YtdlpEventLogger
+
+    messages = []
+    logger = _YtdlpEventLogger(
+        lambda event: messages.append(event.message),
+        lambda message: message,
+    )
+    logger.error("ERROR: ERROR: ffmpeg is not installed")
+    logger.warning("solver skipped")
+
+    assert messages == ["ERROR: ffmpeg is not installed", "solver skipped"]
+
+
+def test_source_run_uses_ffmpeg_on_path(monkeypatch):
+    import desktop_app.download_core as download_core
+
+    monkeypatch.setattr(download_core.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(download_core.shutil, "which", lambda name: r"C:\tools\ffmpeg.exe" if name == "ffmpeg" else None)
+
+    assert download_core.bundled_ffmpeg_path() == r"C:\tools\ffmpeg.exe"
+    assert "FFmpeg ready" in download_core.dependency_summary("firefox")
+    assert "Firefox cookies" in download_core.dependency_summary("firefox")
+    assert "may be unreadable" in download_core.dependency_summary("edge")

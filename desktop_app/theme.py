@@ -31,8 +31,14 @@ def stylesheet(mode: str = "dark") -> str:
     QPushButton#addToQueueButton, QPushButton#primaryButton {{ background: {c['accent']}; border-color: {c['accent']}; color: white; font-weight: 600; }}
     QPushButton#addToQueueButton:hover, QPushButton#primaryButton:hover {{ background: {c['accent_hover']}; }}
     QPushButton#iconButton {{ padding: 5px; min-width: 30px; min-height: 30px; }}
-    QLabel#muted, QLabel#cardMeta, QLabel#latestActivity {{ color: {c['muted']}; }} QLabel#pageTitle {{ font-size: 20pt; font-weight: 700; }} QLabel#sectionTitle {{ font-size: 11pt; font-weight: 600; }}
-    QLabel#statusRunning {{ color: {c['accent_hover']}; font-weight: 600; }} QLabel#statusSuccess {{ color: {c['success']}; font-weight: 600; }} QLabel#statusFailed {{ color: {c['error']}; font-weight: 600; }} QLabel#statusCancelled {{ color: {c['warning']}; }}
+    QLabel#muted, QLabel#cardMeta, QLabel#latestActivity, QLabel#cookieHint {{ color: {c['muted']}; }} QLabel#sectionTitle {{ font-size: 11pt; font-weight: 600; }}
+    QLabel#cardDetail {{ color: {c['text']}; font-family: 'Cascadia Mono', 'Consolas', monospace; }}
+    QLabel#statusQueued, QLabel#statusRunning, QLabel#statusSuccess, QLabel#statusFailed, QLabel#statusCancelled, QLabel#statusCancelling, QLabel#statusPaused {{ padding: 2px 8px; border-radius: 9px; font-size: 9pt; font-weight: 600; }}
+    QLabel#statusQueued {{ color: {c['muted']}; background: {c['surface2']}; }}
+    QLabel#statusRunning {{ color: {c['accent_hover']}; background: {c['surface2']}; }}
+    QLabel#statusSuccess {{ color: {c['success']}; background: {c['surface2']}; }}
+    QLabel#statusFailed {{ color: {c['error']}; background: {c['surface2']}; }}
+    QLabel#statusCancelled, QLabel#statusCancelling, QLabel#statusPaused {{ color: {c['warning']}; background: {c['surface2']}; }}
     QProgressBar {{ background: {c['surface2']}; border: 0; border-radius: 4px; text-align: center; color: {c['text']}; min-height: 9px; max-height: 9px; }} QProgressBar::chunk {{ background: {c['accent']}; border-radius: 4px; }}
     QScrollArea, QScrollArea > QWidget > QWidget {{ border: 0; background: transparent; }} QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }} QScrollBar::handle:vertical {{ background: {c['border']}; border-radius: 5px; min-height: 28px; }} QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }} QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
     QGroupBox {{ margin-top: 12px; padding: 16px 12px 12px; font-weight: 600; }} QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 5px; }}

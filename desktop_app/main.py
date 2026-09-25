@@ -21,7 +21,7 @@ def _resolve_version() -> str:
         try:
             return metadata.version("video-downloader")
         except metadata.PackageNotFoundError:
-            return "0.1.2"
+            return "0.1.3"
 
 
 APP_VERSION = _resolve_version()

@@ -2,7 +2,7 @@
 
 ## Start the desktop app
 
-Install the desktop dependencies, then launch the PySide6 interface:
+Use Python 3.11–3.13 for a packaged build, or Python 3.14 with PySide6 6.10.1 or newer for local development. Install the desktop dependencies, then launch the PySide6 interface:
 
 ```powershell
 python -m pip install -r requirements-desktop.txt
@@ -28,9 +28,12 @@ concurrent-download limit, startup behavior, or light/dark theme. Selecting
 
 ## Cookies for sign-in, age checks, and private videos
 
-Some sites require you to be signed in. In the app settings, select the browser
-that already contains your signed-in session (for example Chrome, Edge, or
-Firefox), then retry the download. Keep that browser installed and signed in.
+Some sites require you to be signed in. On Windows, choose Firefox in Settings
+and stay signed in there. Chrome, Edge, and other Chromium browsers encrypt
+their cookie databases, so this app usually cannot read them.
+
+YouTube also needs Deno (or Node.js) and FFmpeg. The window header shows whether
+each one was found. Install a missing tool, restart the app, then retry.
 
 Do not copy browser cookie files into the project, a release archive, or a
 support message. The app uses the selected local browser profile and should
