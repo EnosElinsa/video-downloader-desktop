@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "SemVer to package when dispatching manually (for example 0.1.3)"
+        description: "SemVer to package when dispatching manually (for example 0.1.4)"
         required: true
-        default: "0.1.3"
+        default: "0.1.4"
         type: string
 
 permissions:
