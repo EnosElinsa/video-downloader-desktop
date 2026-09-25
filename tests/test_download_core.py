@@ -416,3 +416,16 @@ def test_source_run_uses_ffmpeg_on_path(monkeypatch):
     assert "FFmpeg ready" in download_core.dependency_summary("firefox")
     assert "Firefox cookies" in download_core.dependency_summary("firefox")
     assert "may be unreadable" in download_core.dependency_summary("edge")
+
+
+def test_ffmpeg_is_found_from_windows_registry_path(monkeypatch, tmp_path):
+    """Catch a Python process started before WinGet updated the live PATH."""
+    import desktop_app.download_core as download_core
+
+    ffmpeg = tmp_path / "ffmpeg.exe"
+    ffmpeg.write_bytes(b"")
+    monkeypatch.setattr(download_core.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(download_core.shutil, "which", lambda name: None)
+    monkeypatch.setattr(download_core, "registry_path_directories", lambda: [str(tmp_path)])
+
+    assert download_core.bundled_ffmpeg_path() == str(ffmpeg)

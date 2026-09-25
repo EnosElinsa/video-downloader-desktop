@@ -91,6 +91,32 @@ def test_progress_has_one_readable_percent_indicator_at_compact_width(qtbot, tmp
     assert card.contentsRect().contains(card.detail_label.geometry().bottomRight())
 
 
+def test_failed_guidance_sits_under_the_progress_bar(qtbot, tmp_path):
+    window = _window(qtbot, tmp_path)
+    window.add_urls("https://example.test/" + ("very-long-title-" * 40))
+    item_id = window.queue.snapshot()[0]["id"]
+    window.queue.update_status(item_id, "running")
+    window._mark_failed(item_id, "ffmpeg is not installed", "ffmpeg_missing")
+    QApplication.processEvents()
+    card = window.queue_list.card_at(0)
+
+    assert card.guidance_label.geometry().top() >= card.progress.geometry().bottom()
+    assert card.contentsRect().contains(card.guidance_label.geometry().bottomRight())
+    assert card.guidance_label.width() > card.progress.width() // 2
+    assert card.title_label.toolTip().startswith("https://example.test/")
+    assert len(card.title_label.text()) < len(card.title_label.toolTip())
+
+
+def test_header_keeps_queue_count_separate_from_dependency_marks(qtbot, tmp_path):
+    window = _window(qtbot, tmp_path)
+    assert window.header_status.text() == "Ready"
+    assert len(window.dependency_labels) == 3
+    window.add_urls("https://example.test/video")
+    QApplication.processEvents()
+    assert window.header_status.text() == "0 active  ·  1 in queue"
+    assert all(label.text() for label in window.dependency_labels)
+
+
 def test_settings_dialog_has_production_minimum_and_unclipped_form_labels(qtbot, tmp_path):
     dialog = SettingsDialog(AppSettings(output_dir=tmp_path))
     qtbot.addWidget(dialog)

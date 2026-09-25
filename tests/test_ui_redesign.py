@@ -218,5 +218,7 @@ def test_failed_cards_show_actionable_guidance_and_activity_keeps_detail(
     window._mark_failed(item_id, "technical upstream detail", error_code)
 
     card = window.queue_list.card_at(0)
-    assert card.detail_label.text() == ERROR_GUIDANCE[error_code]
+    assert card.guidance_label.text() == ERROR_GUIDANCE[error_code]
+    assert card.guidance_label.isVisible()
+    assert not card.detail_label.isVisible()
     assert "technical upstream detail" in window.activity_log.toPlainText()

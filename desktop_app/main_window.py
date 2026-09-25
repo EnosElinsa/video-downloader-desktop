@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from .controls import ChevronComboBox
-from .download_core import dependency_summary
+from .download_core import dependency_marks
 from .models import DownloadEvent, DownloadRequest, DownloadResult
 from .queue import DownloadQueue
 from .resources import resource_path
@@ -165,7 +165,7 @@ class MainWindow(QMainWindow):
 
         header = QFrame(self)
         header.setObjectName("appHeader")
-        header.setFixedHeight(68)
+        header.setMinimumHeight(88)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(24, 0, 24, 0)
         header_layout.setSpacing(12)
@@ -186,6 +186,16 @@ class MainWindow(QMainWindow):
         self.header_status.setObjectName("muted")
         brand.addWidget(title)
         brand.addWidget(self.header_status)
+        marks = QHBoxLayout()
+        marks.setSpacing(10)
+        self.dependency_labels = []
+        for _index in range(3):
+            label = QLabel(header)
+            label.setObjectName("dependencyReady")
+            self.dependency_labels.append(label)
+            marks.addWidget(label)
+        marks.addStretch()
+        brand.addLayout(marks)
         header_layout.addLayout(brand)
         header_layout.addStretch()
 
@@ -482,7 +492,7 @@ class MainWindow(QMainWindow):
         if event.kind == "metadata":
             safe_title = self._safe_message(event.title) if event.title else None
             self.queue.update_status(item_id, "running", title=safe_title)
-            self._cards[item_id].title_label.setText(safe_title or current["url"])
+            self._cards[item_id].set_title(safe_title or current["url"])
         elif event.kind == "progress":
             self.queue.update_status(
                 item_id,
@@ -588,11 +598,18 @@ class MainWindow(QMainWindow):
         snapshot = self.queue.snapshot()
         running = sum(1 for item in snapshot if item["status"] == "running")
         total = len(snapshot)
-        deps = dependency_summary(getattr(self.settings, "cookie_browser", None))
         if total:
-            self.header_status.setText(f"{deps}  ·  {running} active  ·  {total} in queue")
+            self.header_status.setText(f"{running} active  ·  {total} in queue")
         else:
-            self.header_status.setText(deps)
+            self.header_status.setText("Ready")
+        for label, (text, ready) in zip(
+            self.dependency_labels,
+            dependency_marks(getattr(self.settings, "cookie_browser", None)),
+        ):
+            label.setText(text)
+            label.setObjectName("dependencyReady" if ready else "dependencyMissing")
+            label.style().unpolish(label)
+            label.style().polish(label)
 
     def _persist_output_dir(self):
         selected = self.output_dir_edit.text().strip()

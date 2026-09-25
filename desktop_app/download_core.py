@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import inspect
+import os
 import shutil
 import sys
 from dataclasses import replace
@@ -21,8 +22,42 @@ from .security import (
 from .urls import normalize_http_url
 
 
+def registry_path_directories() -> list[str]:
+    """Read the saved Windows PATH. A running terminal can miss a WinGet install."""
+    if os.name != "nt":
+        return []
+    import winreg
+
+    entries: list[str] = []
+    locations = (
+        (winreg.HKEY_CURRENT_USER, r"Environment"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+    )
+    for hive, subkey in locations:
+        try:
+            with winreg.OpenKey(hive, subkey) as key:
+                value, _ = winreg.QueryValueEx(key, "Path")
+        except OSError:
+            continue
+        entries.extend(part.strip().strip('"') for part in str(value).split(";") if part.strip())
+    return entries
+
+
+def find_executable(name: str) -> str | None:
+    """Find a tool on the process PATH, then on the PATH saved in Windows."""
+    found = shutil.which(name)
+    if found:
+        return found
+    filename = name if name.lower().endswith(".exe") else f"{name}.exe"
+    for directory in registry_path_directories():
+        candidate = Path(os.path.expandvars(directory)) / filename
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
 def bundled_ffmpeg_path() -> str | None:
-    """Return bundled FFmpeg when packaged, otherwise the FFmpeg on PATH."""
+    """Return bundled FFmpeg when packaged, otherwise an installed FFmpeg."""
     if getattr(sys, "frozen", False):
         roots = [Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)), Path(sys.executable).parent]
         for root in roots:
@@ -30,7 +65,7 @@ def bundled_ffmpeg_path() -> str | None:
             if candidate.is_file():
                 return str(candidate)
         return None
-    return shutil.which("ffmpeg")
+    return find_executable("ffmpeg")
 
 
 def format_needs_ffmpeg(selector: str | None) -> bool:
@@ -44,28 +79,34 @@ def format_needs_ffmpeg(selector: str | None) -> bool:
 _CHROMIUM_BROWSERS = {"chrome", "edge", "brave", "opera", "chromium"}
 
 
-def dependency_summary(cookie_browser: str | None = None) -> str:
-    """One-line readiness for FFmpeg, a JS runtime, and the selected browser."""
-    parts = ["FFmpeg ready" if bundled_ffmpeg_path() else "FFmpeg missing"]
+def dependency_marks(cookie_browser: str | None = None) -> list[tuple[str, bool]]:
+    """Readiness marks shared by the header chips and the one-line summary."""
+    ready = bool(bundled_ffmpeg_path())
+    marks = [("FFmpeg ready" if ready else "FFmpeg missing", ready)]
     from .yt_dlp_adapter import detected_js_runtimes
 
     runtimes = detected_js_runtimes()
     if "deno" in runtimes:
-        parts.append("Deno ready")
+        marks.append(("Deno ready", True))
     elif "node" in runtimes:
-        parts.append("Node ready")
+        marks.append(("Node ready", True))
     else:
-        parts.append("JS runtime missing")
+        marks.append(("JS runtime missing", False))
     browser = (cookie_browser or "").strip().lower()
     if not browser:
-        parts.append("No browser cookies")
+        marks.append(("No browser cookies", False))
     elif browser == "firefox":
-        parts.append("Firefox cookies")
+        marks.append(("Firefox cookies", True))
     elif browser in _CHROMIUM_BROWSERS:
-        parts.append(f"{browser.title()} cookies may be unreadable")
+        marks.append((f"{browser.title()} cookies may be unreadable", False))
     else:
-        parts.append(f"{browser} cookies")
-    return "  ·  ".join(parts)
+        marks.append((f"{browser} cookies", True))
+    return marks
+
+
+def dependency_summary(cookie_browser: str | None = None) -> str:
+    """One-line readiness for FFmpeg, a JS runtime, and the selected browser."""
+    return "  ·  ".join(text for text, _ready in dependency_marks(cookie_browser))
 
 
 class YtdlpBackend(Protocol):

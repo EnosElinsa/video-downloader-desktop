@@ -91,11 +91,11 @@ class DownloaderOptionsTests(unittest.TestCase):
         self.assertEqual(options["remote_components"], ["ejs:github"])
 
     def test_enables_node_when_deno_is_absent(self):
-        from desktop_app import yt_dlp_adapter
+        from desktop_app import download_core
 
         with patch.object(
-            yt_dlp_adapter.shutil,
-            "which",
+            download_core,
+            "find_executable",
             lambda name: r"C:\node\node.exe" if name == "node" else None,
         ):
             options = downloader.build_ytdlp_options("https://www.youtube.com/watch?v=demo")

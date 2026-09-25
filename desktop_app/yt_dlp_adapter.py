@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import sys
 from collections.abc import Callable
 from uuid import uuid4
@@ -27,9 +26,11 @@ DEFAULT_USER_AGENT = (
 
 def detected_js_runtimes() -> dict[str, dict[str, str]]:
     """Enable Deno and Node when they are installed. yt-dlp only enables Deno by default."""
+    from .download_core import find_executable
+
     found: dict[str, dict[str, str]] = {}
     for name in ("deno", "node"):
-        path = shutil.which(name)
+        path = find_executable(name)
         if path:
             found[name] = {"path": path}
     return found

@@ -31,7 +31,8 @@ def stylesheet(mode: str = "dark") -> str:
     QPushButton#addToQueueButton, QPushButton#primaryButton {{ background: {c['accent']}; border-color: {c['accent']}; color: white; font-weight: 600; }}
     QPushButton#addToQueueButton:hover, QPushButton#primaryButton:hover {{ background: {c['accent_hover']}; }}
     QPushButton#iconButton {{ padding: 5px; min-width: 30px; min-height: 30px; }}
-    QLabel#muted, QLabel#cardMeta, QLabel#latestActivity, QLabel#cookieHint {{ color: {c['muted']}; }} QLabel#sectionTitle {{ font-size: 11pt; font-weight: 600; }}
+    QLabel#muted, QLabel#cardMeta, QLabel#latestActivity, QLabel#cookieHint, QLabel#dependencyReady, QLabel#guidanceLabel {{ color: {c['muted']}; }} QLabel#sectionTitle {{ font-size: 11pt; font-weight: 600; }}
+    QLabel#dependencyMissing {{ color: {c['error']}; font-weight: 600; }}
     QLabel#cardDetail {{ color: {c['text']}; font-family: 'Cascadia Mono', 'Consolas', monospace; }}
     QLabel#statusQueued, QLabel#statusRunning, QLabel#statusSuccess, QLabel#statusFailed, QLabel#statusCancelled, QLabel#statusCancelling, QLabel#statusPaused {{ padding: 2px 8px; border-radius: 9px; font-size: 9pt; font-weight: 600; }}
     QLabel#statusQueued {{ color: {c['muted']}; background: {c['surface2']}; }}

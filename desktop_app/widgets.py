@@ -152,10 +152,11 @@ class DownloadCard(QFrame):
 
         info = QVBoxLayout()
         info.setSpacing(1)
-        self.title_label = QLabel(self.url, self)
+        self.title_label = QLabel(self)
         self.title_label.setTextFormat(Qt.PlainText)
-        self.title_label.setToolTip(self.url)
         self.title_label.setStyleSheet("font-weight:600;")
+        self._full_title = ""
+        self.set_title(self.url)
         self.meta_label = QLabel(
             f"{self._site}  ·  {self._quality_label(quality)}", self
         )
@@ -181,6 +182,12 @@ class DownloadCard(QFrame):
         progress_row.addWidget(self.detail_label)
         root.addLayout(progress_row)
 
+        self.guidance_label = QLabel(self)
+        self.guidance_label.setObjectName("guidanceLabel")
+        self.guidance_label.setWordWrap(True)
+        self.guidance_label.hide()
+        root.addWidget(self.guidance_label)
+
         actions = QHBoxLayout()
         actions.setSpacing(4)
         actions.addStretch()
@@ -204,6 +211,23 @@ class DownloadCard(QFrame):
             actions.addWidget(button)
         root.addLayout(actions)
         self.set_status("queued")
+
+    def set_title(self, text: str) -> None:
+        self._full_title = text or ""
+        self.title_label.setToolTip(self._full_title)
+        self._refresh_title()
+
+    def _refresh_title(self) -> None:
+        width = self.title_label.width()
+        if width < 80:
+            width = max(160, self.width() - 160)
+        self.title_label.setText(
+            self.title_label.fontMetrics().elidedText(self._full_title, Qt.ElideMiddle, width)
+        )
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._refresh_title()
 
     @staticmethod
     def _quality_label(value: str) -> str:
@@ -246,11 +270,15 @@ class DownloadCard(QFrame):
         if eta is not None:
             details.append(f"ETA {int(eta)}s")
         if status in {"failed", "cancelled"}:
-            self.detail_label.setWordWrap(True)
+            self.detail_label.hide()
             guidance = guidance_for(error_code or status)
-            self.detail_label.setText(guidance)
-            self.detail_label.setToolTip(error or guidance)
+            self.guidance_label.setText(guidance)
+            self.guidance_label.setToolTip(error or guidance)
+            self.guidance_label.show()
+            self.layout().activate()
         else:
+            self.guidance_label.hide()
+            self.detail_label.show()
             self.detail_label.setWordWrap(False)
             self.detail_label.setText("  ·  ".join(details))
             self.detail_label.setToolTip("")
